@@ -31,31 +31,44 @@ public class Main {
 
     /** Default number of production types (n) */
     private static final int DEFAULT_PRODUCTION_TYPES = 5;
+    private static final String ENV_PRODUCTION_TYPES = "PRODUCTION_TYPES";
 
-    /**
-     * Application entry point.
-     * <p>
-     * Accepts an optional command-line argument specifying the number
-     * of production types (n). Defaults to {@value #DEFAULT_PRODUCTION_TYPES}.
-     * </p>
-     *
-     * @param args optional: args[0] = number of production types (integer >= 1)
-     */
-    public static void main(String[] args) {
-        // Parse production type count from command line
-        int n = DEFAULT_PRODUCTION_TYPES;
+    private static int resolveProductionTypes(String[] args) {
         if (args.length > 0) {
             try {
-                n = Integer.parseInt(args[0]);
+                int n = Integer.parseInt(args[0]);
                 if (n < 1) {
-                    logger.warn("无效的生产类型数量: {}，使用默认值: {}", args[0], DEFAULT_PRODUCTION_TYPES);
-                    n = DEFAULT_PRODUCTION_TYPES;
+                    logger.warn("无效的命令行参数: {}，尝试环境变量", args[0]);
+                } else {
+                    logger.info("配置来源: 命令行参数");
+                    return n;
                 }
             } catch (NumberFormatException e) {
-                logger.warn("无法解析 '{}' 为整数，使用默认值: {}", args[0], DEFAULT_PRODUCTION_TYPES);
-                n = DEFAULT_PRODUCTION_TYPES;
+                logger.warn("无法解析命令行参数 '{}' 为整数，尝试环境变量", args[0]);
             }
         }
+
+        String envValue = System.getenv(ENV_PRODUCTION_TYPES);
+        if (envValue != null && !envValue.isEmpty()) {
+            try {
+                int n = Integer.parseInt(envValue);
+                if (n < 1) {
+                    logger.warn("无效的环境变量 {}={}", ENV_PRODUCTION_TYPES, envValue);
+                } else {
+                    logger.info("配置来源: 环境变量 {}={}", ENV_PRODUCTION_TYPES, envValue);
+                    return n;
+                }
+            } catch (NumberFormatException e) {
+                logger.warn("无法解析环境变量 {}='{}' 为整数", ENV_PRODUCTION_TYPES, envValue);
+            }
+        }
+
+        logger.info("配置来源: 默认值 {}", DEFAULT_PRODUCTION_TYPES);
+        return DEFAULT_PRODUCTION_TYPES;
+    }
+
+    public static void main(String[] args) {
+        int n = resolveProductionTypes(args);
 
         logger.info("========================================================");
         logger.info("  工厂生产同步系统 (Factory Production Sync)");

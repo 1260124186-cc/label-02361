@@ -5,6 +5,6 @@ services:
       dockerfile: Dockerfile
     container_name: factory-sync
     restart: unless-stopped
-    command: ["${PRODUCTION_TYPES:-5}"]
     environment:
+      PRODUCTION_TYPES: ${PRODUCTION_TYPES:-5}
       TZ: Asia/Shanghai
