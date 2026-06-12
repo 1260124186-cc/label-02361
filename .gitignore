@@ -1,0 +1,38 @@
+# IDE
+.idea/
+.vscode/
+.cursor/
+.kiro/
+*.iml
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build
+dist/
+build/
+target/
+*.jar
+*.class
+
+# Environment
+.env
+.env.local
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+venv/
+*.pyc
+
+# === AllGood SOP 流程产物（非项目交付物，勿提交） ===
+draft.md
+*-report.md
+.port-overrides.json
+.sop-summary.md
+.allgood-sop

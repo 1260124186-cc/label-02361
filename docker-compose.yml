@@ -1,0 +1,10 @@
+services:
+  factory-sync:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: factory-sync
+    restart: unless-stopped
+    command: ["${PRODUCTION_TYPES:-5}"]
+    environment:
+      TZ: Asia/Shanghai
