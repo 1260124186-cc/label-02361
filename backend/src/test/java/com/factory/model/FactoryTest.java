@@ -1,0 +1,329 @@
+package com.factory.model;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@DisplayName("Factory 核心同步模型测试")
+class FactoryTest {
+
+    @Test
+    @DisplayName("put 后 get 应返回相同的 pID")
+    void testPutThenGetReturnsSameValue() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicInteger result = new AtomicInteger(-1);
+        CountDownLatch getDone = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get());
+            getDone.countDown();
+        }, "consumer");
+        consumer.start();
+
+        Thread.sleep(50);
+        factory.put(42);
+
+        assertTrue(getDone.await(2, TimeUnit.SECONDS));
+        assertEquals(42, result.get());
+        consumer.join(2000);
+    }
+
+    @Test
+    @DisplayName("初始状态：get 应阻塞直到 put 被调用")
+    void testGetBlocksWhenBoxEmpty() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicBoolean getReturned = new AtomicBoolean(false);
+
+        Thread consumer = new Thread(() -> {
+            factory.get();
+            getReturned.set(true);
+        }, "consumer");
+        consumer.start();
+
+        Thread.sleep(300);
+        assertFalse(getReturned.get(), "get() 在没有 put() 时应该阻塞");
+
+        factory.put(1);
+        consumer.join(2000);
+        assertTrue(getReturned.get(), "put() 后 get() 应该返回");
+    }
+
+    @Test
+    @DisplayName("put 后再次 put 应阻塞直到 get 取走")
+    void testPutBlocksWhenBoxFull() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicBoolean secondPutCompleted = new AtomicBoolean(false);
+        CountDownLatch firstPutDone = new CountDownLatch(1);
+
+        Thread producer1 = new Thread(() -> {
+            factory.put(1);
+            firstPutDone.countDown();
+        }, "producer1");
+        producer1.start();
+
+        assertTrue(firstPutDone.await(2, TimeUnit.SECONDS));
+
+        Thread producer2 = new Thread(() -> {
+            factory.put(2);
+            secondPutCompleted.set(true);
+        }, "producer2");
+        producer2.start();
+
+        Thread.sleep(300);
+        assertFalse(secondPutCompleted.get(), "第二次 put() 在 get() 之前应该阻塞");
+
+        factory.get();
+        producer2.join(2000);
+        assertTrue(secondPutCompleted.get(), "get() 后第二次 put() 应该完成");
+        producer1.join(2000);
+    }
+
+    @Test
+    @DisplayName("多轮 put/get 交替执行应保持数据正确")
+    void testMultiplePutGetCycles() throws InterruptedException {
+        Factory factory = new Factory();
+        int cycles = 10;
+
+        for (int i = 1; i <= cycles; i++) {
+            AtomicInteger result = new AtomicInteger(-1);
+            CountDownLatch getDone = new CountDownLatch(1);
+
+            Thread consumer = new Thread(() -> {
+                result.set(factory.get());
+                getDone.countDown();
+            }, "consumer-" + i);
+            consumer.start();
+
+            factory.put(i);
+
+            assertTrue(getDone.await(2, TimeUnit.SECONDS),
+                    "第 " + i + " 轮 get() 应该在 put() 后返回");
+            assertEquals(i, result.get(),
+                    "第 " + i + " 轮返回值应等于 " + i);
+            consumer.join(1000);
+        }
+    }
+
+    @Test
+    @DisplayName("get 在 wait 期间被中断应返回 -1")
+    void testGetInterruptedWhileWaiting() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicReference<Integer> result = new AtomicReference<>(0);
+        CountDownLatch started = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            started.countDown();
+            result.set(factory.get());
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(started.await(1, TimeUnit.SECONDS));
+        Thread.sleep(100);
+
+        consumer.interrupt();
+        consumer.join(2000);
+
+        assertEquals(-1, result.get(), "被中断时 get() 应返回 -1");
+    }
+
+    @Test
+    @DisplayName("put 在 wait 期间被中断应安全退出")
+    void testPutInterruptedWhileWaiting() throws InterruptedException {
+        Factory factory = new Factory();
+
+        factory.put(1);
+
+        CountDownLatch started = new CountDownLatch(1);
+
+        Thread producer = new Thread(() -> {
+            started.countDown();
+            factory.put(2);
+        }, "producer");
+        producer.start();
+
+        assertTrue(started.await(1, TimeUnit.SECONDS));
+
+        while (producer.getState() != Thread.State.WAITING) {
+            Thread.yield();
+        }
+
+        producer.interrupt();
+        producer.join(2000);
+
+        assertTrue(producer.isInterrupted(),
+                "被中断后线程中断标志应被恢复");
+    }
+
+    @Test
+    @DisplayName("put 先于 get：先放入后取出应正常工作")
+    void testPutBeforeGet() throws InterruptedException {
+        Factory factory = new Factory();
+
+        factory.put(99);
+
+        AtomicInteger result = new AtomicInteger(-1);
+        CountDownLatch done = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get());
+            done.countDown();
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(done.await(2, TimeUnit.SECONDS));
+        assertEquals(99, result.get());
+        consumer.join(1000);
+    }
+
+    @Test
+    @DisplayName("get 先于 put：消费者先等待，生产者放入后唤醒消费者")
+    void testGetBeforePut() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicInteger result = new AtomicInteger(-1);
+        CountDownLatch consumerWaiting = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            consumerWaiting.countDown();
+            result.set(factory.get());
+            done.countDown();
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(consumerWaiting.await(1, TimeUnit.SECONDS));
+        Thread.sleep(100);
+
+        factory.put(77);
+
+        assertTrue(done.await(2, TimeUnit.SECONDS));
+        assertEquals(77, result.get());
+        consumer.join(1000);
+    }
+
+    @Test
+    @DisplayName("并发场景：多个生产者和消费者交替操作不丢失数据")
+    void testConcurrentPutGetPreservesData() throws InterruptedException {
+        Factory factory = new Factory();
+        int totalItems = 20;
+        AtomicInteger consumedSum = new AtomicInteger(0);
+        CountDownLatch allConsumed = new CountDownLatch(totalItems);
+
+        Thread consumer = new Thread(() -> {
+            for (int i = 0; i < totalItems; i++) {
+                int val = factory.get();
+                if (val != -1) {
+                    consumedSum.addAndGet(val);
+                }
+                allConsumed.countDown();
+            }
+        }, "consumer");
+
+        Thread producer = new Thread(() -> {
+            for (int i = 1; i <= totalItems; i++) {
+                factory.put(i);
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }, "producer");
+
+        consumer.start();
+        producer.start();
+
+        assertTrue(allConsumed.await(10, TimeUnit.SECONDS));
+        int expectedSum = totalItems * (totalItems + 1) / 2;
+        assertEquals(expectedSum, consumedSum.get(),
+                "消费的总和应等于 1+2+...+" + totalItems);
+
+        producer.join(2000);
+        consumer.join(2000);
+    }
+
+    @Test
+    @DisplayName("put(0) 应正常工作，get 返回 0")
+    void testPutZeroValue() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicInteger result = new AtomicInteger(-999);
+        CountDownLatch done = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get());
+            done.countDown();
+        }, "consumer");
+        consumer.start();
+
+        factory.put(0);
+
+        assertTrue(done.await(2, TimeUnit.SECONDS));
+        assertEquals(0, result.get());
+        consumer.join(1000);
+    }
+
+    @Test
+    @DisplayName("put 负数也应正常传递")
+    void testPutNegativeValue() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicInteger result = new AtomicInteger(0);
+        CountDownLatch done = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get());
+            done.countDown();
+        }, "consumer");
+        consumer.start();
+
+        factory.put(-5);
+
+        assertTrue(done.await(2, TimeUnit.SECONDS));
+        assertEquals(-5, result.get());
+        consumer.join(1000);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @DisplayName("快速连续 put/get 不死锁")
+    void testNoDeadlockUnderRapidExchange() throws InterruptedException {
+        Factory factory = new Factory();
+        int rounds = 50;
+        CountDownLatch allDone = new CountDownLatch(2);
+
+        Thread producer = new Thread(() -> {
+            for (int i = 1; i <= rounds; i++) {
+                factory.put(i);
+            }
+            allDone.countDown();
+        }, "producer");
+
+        Thread consumer = new Thread(() -> {
+            for (int i = 1; i <= rounds; i++) {
+                factory.get();
+            }
+            allDone.countDown();
+        }, "consumer");
+
+        producer.start();
+        consumer.start();
+
+        assertTrue(allDone.await(5, TimeUnit.SECONDS), "快速交替操作不应死锁");
+        producer.join(2000);
+        consumer.join(2000);
+    }
+}
