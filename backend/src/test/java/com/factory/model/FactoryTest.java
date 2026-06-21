@@ -408,4 +408,182 @@ class FactoryTest {
         Factory noRegistry = new Factory();
         assertNull(noRegistry.getRegistry());
     }
+
+    // ========== 只读状态方法测试 ==========
+
+    @Test
+    @DisplayName("isLocked() 初始应为 false，put 后为 true，get 后恢复 false")
+    void testIsLockedStateTransitions() throws InterruptedException {
+        Factory factory = new Factory();
+
+        assertFalse(factory.isLocked(), "初始状态应为 false");
+
+        CountDownLatch getDone = new CountDownLatch(1);
+        AtomicInteger result = new AtomicInteger(-1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get());
+            getDone.countDown();
+        }, "consumer");
+        consumer.start();
+
+        Thread.sleep(50);
+        factory.put(1);
+
+        assertTrue(getDone.await(2, TimeUnit.SECONDS));
+        assertFalse(factory.isLocked(), "get() 后应恢复 false");
+
+        consumer.join(2000);
+    }
+
+    @Test
+    @DisplayName("isLocked() 在 put 后 get 前应为 true")
+    void testIsLockedTrueAfterPut() throws InterruptedException {
+        Factory factory = new Factory();
+
+        factory.put(42);
+
+        assertTrue(factory.isLocked(), "put() 后应为 true");
+
+        factory.get();
+
+        assertFalse(factory.isLocked(), "get() 后应为 false");
+    }
+
+    @Test
+    @DisplayName("getCurrentPID() 初始为 0，put 后返回对应 pID")
+    void testGetCurrentPID() throws InterruptedException {
+        Factory factory = new Factory();
+
+        assertEquals(0, factory.getCurrentPID(), "初始 pID 应为 0");
+
+        factory.put(7);
+
+        assertEquals(7, factory.getCurrentPID(), "put(7) 后应返回 7");
+
+        CountDownLatch getDone = new CountDownLatch(1);
+        Thread consumer = new Thread(() -> {
+            factory.get();
+            getDone.countDown();
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(getDone.await(2, TimeUnit.SECONDS));
+        consumer.join(1000);
+    }
+
+    @Test
+    @DisplayName("getTotalPutCount() 和 getTotalGetCount() 应正确累计")
+    void testTotalPutGetCounts() throws InterruptedException {
+        Factory factory = new Factory();
+        int cycles = 5;
+
+        assertEquals(0, factory.getTotalPutCount());
+        assertEquals(0, factory.getTotalGetCount());
+
+        for (int i = 1; i <= cycles; i++) {
+            CountDownLatch getDone = new CountDownLatch(1);
+
+            Thread consumer = new Thread(() -> {
+                factory.get();
+                getDone.countDown();
+            }, "consumer-" + i);
+            consumer.start();
+
+            Thread.sleep(30);
+            factory.put(i);
+
+            assertTrue(getDone.await(2, TimeUnit.SECONDS));
+            consumer.join(1000);
+        }
+
+        assertEquals(cycles, factory.getTotalPutCount());
+        assertEquals(cycles, factory.getTotalGetCount());
+    }
+
+    @Test
+    @DisplayName("getManagerWaitCount() 应记录经理被阻塞的次数")
+    void testManagerWaitCount() throws InterruptedException {
+        Factory factory = new Factory();
+
+        assertEquals(0, factory.getManagerWaitCount(), "初始应为 0");
+
+        factory.put(1);
+
+        assertEquals(0, factory.getManagerWaitCount(), "无竞争时不应等待");
+
+        CountDownLatch secondPutStarted = new CountDownLatch(1);
+        AtomicBoolean secondPutDone = new AtomicBoolean(false);
+
+        Thread producer2 = new Thread(() -> {
+            secondPutStarted.countDown();
+            factory.put(2);
+            secondPutDone.set(true);
+        }, "producer2");
+        producer2.start();
+
+        assertTrue(secondPutStarted.await(1, TimeUnit.SECONDS));
+        Thread.sleep(200);
+
+        assertEquals(1, factory.getManagerWaitCount(), "第二次 put 应阻塞一次");
+
+        factory.get();
+        producer2.join(2000);
+        assertTrue(secondPutDone.get());
+
+        assertEquals(1, factory.getManagerWaitCount(), "put 完成后等待次数不变");
+    }
+
+    @Test
+    @DisplayName("getTeamLeaderWaitCount() 应记录组长被阻塞的次数")
+    void testTeamLeaderWaitCount() throws InterruptedException {
+        Factory factory = new Factory();
+
+        assertEquals(0, factory.getTeamLeaderWaitCount(), "初始应为 0");
+
+        CountDownLatch getDone = new CountDownLatch(1);
+        AtomicBoolean getReturned = new AtomicBoolean(false);
+
+        Thread consumer = new Thread(() -> {
+            getReturned.set(true);
+            factory.get();
+            getDone.countDown();
+        }, "consumer");
+        consumer.start();
+
+        Thread.sleep(200);
+
+        assertEquals(1, factory.getTeamLeaderWaitCount(), "空盒时 get 应阻塞一次");
+
+        factory.put(1);
+
+        assertTrue(getDone.await(2, TimeUnit.SECONDS));
+        consumer.join(2000);
+
+        assertEquals(1, factory.getTeamLeaderWaitCount(), "get 完成后等待次数不变");
+    }
+
+    @Test
+    @DisplayName("多轮交替下 waitCount 应持续累计")
+    void testWaitCountAccumulates() throws InterruptedException {
+        Factory factory = new Factory();
+
+        for (int i = 1; i <= 3; i++) {
+            CountDownLatch getDone = new CountDownLatch(1);
+            Thread consumer = new Thread(() -> {
+                factory.get();
+                getDone.countDown();
+            }, "consumer-" + i);
+            consumer.start();
+            Thread.sleep(50);
+            factory.put(i);
+            assertTrue(getDone.await(2, TimeUnit.SECONDS));
+            consumer.join(1000);
+        }
+
+        assertTrue(factory.getTeamLeaderWaitCount() >= 3,
+                "组长等待次数应 >= 3，实际: " + factory.getTeamLeaderWaitCount());
+        assertEquals(0, factory.getManagerWaitCount(),
+                "经理在无竞争时等待次数应为 0");
+    }
 }

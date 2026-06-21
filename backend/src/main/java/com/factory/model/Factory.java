@@ -14,16 +14,52 @@ public class Factory {
 
     private boolean lock = false;
 
+    private int totalPutCount;
+    private int totalGetCount;
+    private int managerWaitCount;
+    private int teamLeaderWaitCount;
+    private long managerWaitTotalNanos;
+    private long teamLeaderWaitTotalNanos;
+    private long managerWaitStartNanos;
+    private long teamLeaderWaitStartNanos;
+    private final long startTimeNanos;
+
     public Factory() {
         this.registry = null;
+        this.startTimeNanos = System.nanoTime();
     }
 
     public Factory(ProductionTypeRegistry registry) {
         this.registry = registry;
+        this.startTimeNanos = System.nanoTime();
     }
 
     public ProductionTypeRegistry getRegistry() {
         return registry;
+    }
+
+    public synchronized boolean isLocked() {
+        return lock;
+    }
+
+    public synchronized int getCurrentPID() {
+        return pID;
+    }
+
+    public synchronized int getTotalPutCount() {
+        return totalPutCount;
+    }
+
+    public synchronized int getTotalGetCount() {
+        return totalGetCount;
+    }
+
+    public synchronized int getManagerWaitCount() {
+        return managerWaitCount;
+    }
+
+    public synchronized int getTeamLeaderWaitCount() {
+        return teamLeaderWaitCount;
     }
 
     public synchronized void put(int pID) {
@@ -47,8 +83,13 @@ public class Factory {
         while (lock) {
             try {
                 logger.debug("经理等待中 - 任务盒已上锁（pID={} 尚未被处理）", this.pID);
+                managerWaitCount++;
+                managerWaitStartNanos = System.nanoTime();
                 wait();
+                managerWaitTotalNanos += System.nanoTime() - managerWaitStartNanos;
+                managerWaitStartNanos = 0;
             } catch (InterruptedException e) {
+                managerWaitStartNanos = 0;
                 Thread.currentThread().interrupt();
                 logger.error("经理线程在等待时被中断", e);
                 return;
@@ -57,6 +98,7 @@ public class Factory {
 
         this.pID = pID;
         lock = true;
+        totalPutCount++;
 
         if (registry != null) {
             ProductionType pt = registry.getById(pID);
@@ -73,8 +115,13 @@ public class Factory {
         while (!lock) {
             try {
                 logger.debug("组长等待中 - 任务盒为空（尚无任务），调用 wait() 阻塞");
+                teamLeaderWaitCount++;
+                teamLeaderWaitStartNanos = System.nanoTime();
                 wait();
+                teamLeaderWaitTotalNanos += System.nanoTime() - teamLeaderWaitStartNanos;
+                teamLeaderWaitStartNanos = 0;
             } catch (InterruptedException e) {
+                teamLeaderWaitStartNanos = 0;
                 Thread.currentThread().interrupt();
                 logger.error("组长线程在等待时被中断", e);
                 return -1;
@@ -83,6 +130,7 @@ public class Factory {
 
         lock = false;
         int result = this.pID;
+        totalGetCount++;
 
         if (registry != null) {
             ProductionType pt = registry.getById(result);
@@ -94,5 +142,47 @@ public class Factory {
 
         notify();
         return result;
+    }
+
+    public synchronized FactoryMetrics createMetrics() {
+        long now = System.nanoTime();
+        long elapsedNanos = now - startTimeNanos;
+        double elapsedMs = elapsedNanos / 1_000_000.0;
+        double elapsedMinutes = elapsedMs / 60_000.0;
+
+        long currentManagerWaitNanos = managerWaitTotalNanos;
+        if (managerWaitStartNanos > 0) {
+            currentManagerWaitNanos += now - managerWaitStartNanos;
+        }
+
+        long currentTeamLeaderWaitNanos = teamLeaderWaitTotalNanos;
+        if (teamLeaderWaitStartNanos > 0) {
+            currentTeamLeaderWaitNanos += now - teamLeaderWaitStartNanos;
+        }
+
+        long totalWaitNanos = currentManagerWaitNanos + currentTeamLeaderWaitNanos;
+        int totalWaits = managerWaitCount + teamLeaderWaitCount;
+        double averageWaitDurationMs = totalWaits > 0
+                ? (totalWaitNanos / 1_000_000.0) / totalWaits
+                : 0.0;
+
+        double throughputTasksPerMinute = elapsedMinutes > 0
+                ? totalGetCount / elapsedMinutes
+                : 0.0;
+
+        double managerIdleRate = elapsedNanos > 0
+                ? (double) currentManagerWaitNanos / elapsedNanos
+                : 0.0;
+
+        double teamLeaderIdleRate = elapsedNanos > 0
+                ? (double) currentTeamLeaderWaitNanos / elapsedNanos
+                : 0.0;
+
+        return new FactoryMetrics(
+                averageWaitDurationMs,
+                throughputTasksPerMinute,
+                managerIdleRate,
+                teamLeaderIdleRate
+        );
     }
 }
