@@ -22,10 +22,10 @@ public class ProductionTypeConfigLoader {
     private static final String DEFAULT_YAML_RESOURCE = "production-types.yaml";
     private static final String ENV_CONFIG_PATH = "PRODUCTION_TYPES_CONFIG";
     private static final String ENV_PRODUCTION_TYPES = "PRODUCTION_TYPES";
-    private static final int DEFAULT_N = 5;
 
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    private final AppConfig appConfig;
 
     public static class LoadResult {
         public final ProductionTypeRegistry registry;
@@ -39,6 +39,14 @@ public class ProductionTypeConfigLoader {
         }
     }
 
+    public ProductionTypeConfigLoader() {
+        this(AppConfig.load(new String[0]));
+    }
+
+    public ProductionTypeConfigLoader(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+
     public LoadResult load(String[] args) {
         ConfigResolution resolution = resolveConfig(args);
         logger.info("生产类型配置来源: {}", resolution.source);
@@ -49,7 +57,7 @@ public class ProductionTypeConfigLoader {
         } else if (resolution.n != null) {
             registry = ProductionTypeRegistry.createDefault(resolution.n);
         } else {
-            registry = ProductionTypeRegistry.createDefault(DEFAULT_N);
+            registry = ProductionTypeRegistry.createDefault(appConfig.getProductionTypes());
         }
 
         ProductionStrategy strategy = resolution.strategy != null
@@ -125,8 +133,10 @@ public class ProductionTypeConfigLoader {
             }
         }
 
-        result.n = DEFAULT_N;
-        result.source = "默认值 n=" + DEFAULT_N;
+        result.n = appConfig.getProductionTypes();
+        result.source = String.format("配置默认值 production.types=%d (来源: %s)",
+                appConfig.getProductionTypes(),
+                appConfig.getConfigSource(AppConfig.KEY_PRODUCTION_TYPES));
         result.strategy = resolveStrategy(args);
         return result;
     }

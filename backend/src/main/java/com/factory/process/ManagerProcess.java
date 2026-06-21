@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 package com.factory.process;
 
+import com.factory.config.AppConfig;
 import com.factory.config.ProductionStrategy;
 import com.factory.model.Factory;
 import com.factory.model.ProductionTypeRegistry;
@@ -19,22 +20,39 @@ public class ManagerProcess implements Runnable {
     private final ProductionStrategy strategy;
     private final int legacyMaxProductionTypes;
     private final boolean legacyMode;
+    private final long intervalMs;
 
     public ManagerProcess(Factory factory, int maxProductionTypes) {
+        this(factory, maxProductionTypes, AppConfig.DEFAULT_MANAGER_INTERVAL_MS);
+    }
+
+    public ManagerProcess(Factory factory, int maxProductionTypes, long intervalMs) {
         if (factory == null) {
             throw new IllegalArgumentException("Factory must not be null");
         }
         if (maxProductionTypes < 1) {
             throw new IllegalArgumentException("maxProductionTypes must be >= 1, got: " + maxProductionTypes);
         }
+        if (intervalMs < 0) {
+            throw new IllegalArgumentException("intervalMs must be >= 0, got: " + intervalMs);
+        }
         this.factory = factory;
         this.registry = null;
         this.strategy = null;
         this.legacyMaxProductionTypes = maxProductionTypes;
         this.legacyMode = true;
+        this.intervalMs = intervalMs;
     }
 
     public ManagerProcess(Factory factory, ProductionTypeRegistry registry, ProductionStrategy strategy) {
+        this(factory, registry, strategy, AppConfig.DEFAULT_MANAGER_INTERVAL_MS);
+    }
+
+    public ManagerProcess(Factory factory, ProductionTypeRegistry registry, ProductionStrategy strategy, AppConfig config) {
+        this(factory, registry, strategy, config.getManagerIntervalMs());
+    }
+
+    public ManagerProcess(Factory factory, ProductionTypeRegistry registry, ProductionStrategy strategy, long intervalMs) {
         if (factory == null) {
             throw new IllegalArgumentException("Factory must not be null");
         }
@@ -44,11 +62,15 @@ public class ManagerProcess implements Runnable {
         if (strategy == null) {
             throw new IllegalArgumentException("ProductionStrategy must not be null");
         }
+        if (intervalMs < 0) {
+            throw new IllegalArgumentException("intervalMs must be >= 0, got: " + intervalMs);
+        }
         this.factory = factory;
         this.registry = registry;
         this.strategy = strategy;
         this.legacyMaxProductionTypes = registry.getMaxId();
         this.legacyMode = false;
+        this.intervalMs = intervalMs;
     }
 
     @Override
@@ -75,7 +97,7 @@ public class ManagerProcess implements Runnable {
             pID = (pID % legacyMaxProductionTypes) + 1;
 
             try {
-                Thread.sleep(1000);
+                Thread.sleep(intervalMs);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
@@ -100,7 +122,7 @@ public class ManagerProcess implements Runnable {
             if (!pIDIterator.hasNext()) {
                 logger.info("[第 {} 天] 当前策略跳过今日生产（如周末），等待下一天...", dayCount);
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(intervalMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
@@ -134,7 +156,7 @@ public class ManagerProcess implements Runnable {
             }
 
             try {
-                Thread.sleep(1000);
+                Thread.sleep(intervalMs);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
@@ -143,5 +165,9 @@ public class ManagerProcess implements Runnable {
         }
 
         logger.info("经理进程已终止");
+    }
+
+    public long getIntervalMs() {
+        return intervalMs;
     }
 }

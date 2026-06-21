@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 package com.factory.process;
 
+import com.factory.config.AppConfig;
 import com.factory.model.Factory;
 import com.factory.model.ProductionType;
 import com.factory.model.ProductionTypeRegistry;
@@ -11,25 +12,36 @@ public class TeamLeaderProcess implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(TeamLeaderProcess.class);
 
-    private static final long DEFAULT_MANUFACTURING_MS = 1500L;
-
     private final Factory factory;
     private final ProductionTypeRegistry registry;
+    private final long defaultManufacturingMs;
 
     public TeamLeaderProcess(Factory factory) {
-        if (factory == null) {
-            throw new IllegalArgumentException("Factory must not be null");
-        }
-        this.factory = factory;
-        this.registry = null;
+        this(factory, null, AppConfig.DEFAULT_TEAM_LEADER_MANUFACTURING_MS);
+    }
+
+    public TeamLeaderProcess(Factory factory, long defaultManufacturingMs) {
+        this(factory, null, defaultManufacturingMs);
     }
 
     public TeamLeaderProcess(Factory factory, ProductionTypeRegistry registry) {
+        this(factory, registry, AppConfig.DEFAULT_TEAM_LEADER_MANUFACTURING_MS);
+    }
+
+    public TeamLeaderProcess(Factory factory, ProductionTypeRegistry registry, AppConfig config) {
+        this(factory, registry, config.getTeamLeaderManufacturingMs());
+    }
+
+    public TeamLeaderProcess(Factory factory, ProductionTypeRegistry registry, long defaultManufacturingMs) {
         if (factory == null) {
             throw new IllegalArgumentException("Factory must not be null");
         }
+        if (defaultManufacturingMs < 0) {
+            throw new IllegalArgumentException("defaultManufacturingMs must be >= 0, got: " + defaultManufacturingMs);
+        }
         this.factory = factory;
         this.registry = registry;
+        this.defaultManufacturingMs = defaultManufacturingMs;
     }
 
     @Override
@@ -47,7 +59,7 @@ public class TeamLeaderProcess implements Runnable {
 
             taskCount++;
 
-            long manufacturingMs = DEFAULT_MANUFACTURING_MS;
+            long manufacturingMs = defaultManufacturingMs;
             String typeName = null;
 
             if (registry != null) {
@@ -57,7 +69,7 @@ public class TeamLeaderProcess implements Runnable {
                     typeName = pt.getName();
                 } catch (Exception e) {
                     logger.warn("[任务 #{}] 未找到 pID={} 的元数据，使用默认制造时长 {}ms",
-                            taskCount, pID, DEFAULT_MANUFACTURING_MS);
+                            taskCount, pID, defaultManufacturingMs);
                 }
             }
 
@@ -84,5 +96,9 @@ public class TeamLeaderProcess implements Runnable {
         }
 
         logger.info("组长进程已终止");
+    }
+
+    public long getDefaultManufacturingMs() {
+        return defaultManufacturingMs;
     }
 }
