@@ -6,37 +6,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Team Leader Process (Consumer).
+ * 组长进程（消费者）：从任务盒取 pID 并组织团队制造。
  * <p>
- * The team leader gets the production type from the task box and then
- * organizes team members to manufacture it. The team leader has a unique
- * key to open the lock on the task box.
- * The process repeats without stopping until the thread is interrupted.
- * </p>
- * <p>
- * Synchronization behavior:
- * <ul>
- *   <li>If the getting operation is ahead of the putting operation,
- *       the team leader is blocked through {@code wait()}</li>
- *   <li>Opens the lock with the unique key ({@code lock = false})</li>
- *   <li>Gets the production type and notifies the Manager</li>
- * </ul>
+ * 详细流程请参见 {@code docs/project_design.md} 第 3、4.3 节。
  * </p>
  *
  * @author factory-sync
  * @version 1.0.0
+ * @see <a href="../../docs/project_design.md">project_design.md</a>
  */
 public class TeamLeaderProcess implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(TeamLeaderProcess.class);
 
-    /** Shared Factory (task box) instance */
+    /** Shared Factory (task box) instance. */
     private final Factory factory;
 
     /**
-     * Constructs a TeamLeaderProcess.
-     *
-     * @param factory the shared Factory task box
+     * @param factory the shared Factory task box (non-null)
+     * @throws IllegalArgumentException if factory is null
      */
     public TeamLeaderProcess(Factory factory) {
         if (factory == null) {
@@ -46,11 +34,13 @@ public class TeamLeaderProcess implements Runnable {
     }
 
     /**
-     * Runs the team leader consumption loop.
+     * 组长消费循环：持续取任务并制造，直到线程被中断。
      * <p>
-     * Continuously retrieves production types from the task box and
-     * simulates organizing team members for manufacturing. A simulated
-     * manufacturing interval represents the production time.
+     * 非显而易见行为：
+     * <ul>
+     *   <li>factory.get() 返回 {@code -1} 表示等待期间被中断，需立即 break</li>
+     *   <li>制造间隔 (1.5s) 大于经理分配间隔 (1s)，模拟生产慢于计划</li>
+     * </ul>
      * </p>
      */
     @Override

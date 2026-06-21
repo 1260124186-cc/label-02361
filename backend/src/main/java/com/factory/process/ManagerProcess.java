@@ -6,39 +6,29 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Manager Process (Producer).
+ * 经理进程（生产者）：循环向任务盒分配生产类型 pID。
  * <p>
- * The manager daily puts the manufacturing production type into the task box.
- * Production types are modelled as integers pID (1..n) and cycle repeatedly.
- * The process repeats without stopping until the thread is interrupted.
- * </p>
- * <p>
- * Synchronization behavior:
- * <ul>
- *   <li>Only puts when the box lock is opened ({@code lock == false})</li>
- *   <li>After putting, locks the box and notifies the Team Leader</li>
- *   <li>If the box is still locked, waits via {@code wait()} inside Factory</li>
- * </ul>
+ * 详细流程请参见 {@code docs/project_design.md} 第 3、4.2 节。
  * </p>
  *
  * @author factory-sync
  * @version 1.0.0
+ * @see <a href="../../docs/project_design.md">project_design.md</a>
  */
 public class ManagerProcess implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(ManagerProcess.class);
 
-    /** Shared Factory (task box) instance */
+    /** Shared Factory (task box) instance. */
     private final Factory factory;
 
-    /** Maximum production type ID (n). Production types cycle 1..n */
+    /** Maximum production type ID. Production types cycle 1..n. */
     private final int maxProductionTypes;
 
     /**
-     * Constructs a ManagerProcess.
-     *
-     * @param factory            the shared Factory task box
-     * @param maxProductionTypes the maximum production type ID (n)
+     * @param factory            the shared Factory task box (non-null)
+     * @param maxProductionTypes the maximum pID, must be {@code >= 1}
+     * @throws IllegalArgumentException if factory is null or maxProductionTypes invalid
      */
     public ManagerProcess(Factory factory, int maxProductionTypes) {
         if (factory == null) {
@@ -52,11 +42,13 @@ public class ManagerProcess implements Runnable {
     }
 
     /**
-     * Runs the manager production loop.
+     * 经理生产循环：持续分配 pID 1..n，直到线程被中断。
      * <p>
-     * Continuously cycles through production types 1..n, putting each
-     * into the task box. A simulated work interval represents the daily
-     * production planning cycle.
+     * 非显而易见行为：
+     * <ul>
+     *   <li>pID 取模循环：{@code (pID % maxProductionTypes) + 1}</li>
+     *   <li>Sleep 期间被中断后恢复中断标志位，使 while 条件正常退出</li>
+     * </ul>
      * </p>
      */
     @Override

@@ -5,53 +5,38 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Factory class representing a task box with a lock mechanism.
+ * 带锁机制的共享任务盒（生产者-消费者模型）。
  * <p>
- * The task box holds a production type ID (pID). Access is synchronized
- * between the Manager (producer) and Team Leader (consumer) using
- * Java's intrinsic lock with {@code wait()} and {@code notify()}.
- * </p>
- * <p>
- * Lock semantics:
- * <ul>
- *   <li>{@code lock = false} (opened) — the box is empty, Manager can put</li>
- *   <li>{@code lock = true} (locked) — the box is full, Team Leader can get</li>
- * </ul>
+ * 详细设计与同步语义请参见 {@code docs/project_design.md} 第 2、4.1 节。
  * </p>
  *
  * @author factory-sync
  * @version 1.0.0
+ * @see <a href="../../docs/project_design.md">project_design.md</a>
  */
 public class Factory {
 
     private static final Logger logger = LoggerFactory.getLogger(Factory.class);
 
-    /** Production type ID stored in the task box */
+    /** Production type ID stored in the task box. */
     private int pID;
 
     /**
-     * Lock state of the task box.
-     * <ul>
-     *   <li>{@code false} = opened (initial state, box is empty)</li>
-     *   <li>{@code true}  = locked (box contains an unprocessed task)</li>
-     * </ul>
+     * Lock state: {@code false}=opened(empty), {@code true}=locked(full).
      */
     private boolean lock = false;
 
     /**
-     * Manager puts a production type into the task box.
+     * Manager 将生产类型放入任务盒。
      * <p>
-     * The manager only conducts the putting operation when the box lock is opened
-     * ({@code lock == false}). If the lock is currently locked ({@code lock == true}),
-     * the manager waits until the team leader processes the current task and opens
-     * the lock.
-     * </p>
-     * <p>
-     * After finishing the putting operation, the manager locks the box
-     * ({@code lock = true}) and informs the team leader through {@code notify()}.
+     * 非显而易见行为：
+     * <ul>
+     *   <li>使用 while 循环而非 if 判断，防止虚假唤醒（spurious wakeup）</li>
+     *   <li>中断时恢复中断标志位并直接返回，不再执行 put</li>
+     * </ul>
      * </p>
      *
-     * @param pID the production type ID (1..n) to put into the task box
+     * @param pID the production type ID (1..n)
      */
     public synchronized void put(int pID) {
         // Manager waits while lock is locked (box already has an unprocessed task)
@@ -79,19 +64,17 @@ public class Factory {
     }
 
     /**
-     * Team leader gets the production type from the task box.
+     * Team Leader 从任务盒取出生产类型。
      * <p>
-     * If the getting operation of the team leader is ahead of the putting
-     * operation of the manager (i.e., the box is empty / lock is opened),
-     * the team leader is blocked through {@code wait()}.
-     * </p>
-     * <p>
-     * The team leader has a unique key. Upon being notified, the team leader
-     * opens the lock ({@code lock = false}) and then gets the production type
-     * assigned by the manager.
+     * 非显而易见行为：
+     * <ul>
+     *   <li>使用 while 循环而非 if 判断，防止虚假唤醒（spurious wakeup）</li>
+     *   <li>先开锁再读取 pID，顺序不可颠倒</li>
+     *   <li>中断时返回 {@code -1}，调用方需据此判断退出</li>
+     * </ul>
      * </p>
      *
-     * @return the production type ID from the task box, or -1 if interrupted
+     * @return the production type ID, or {@code -1} if interrupted
      */
     public synchronized int get() {
         // Team leader waits if the box is empty (lock is opened, no task to get)
