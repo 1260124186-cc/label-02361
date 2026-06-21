@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "name": "Type-A",
+    "description": "A类产品 - 标准件",
+    "manufacturingDurationMs": 1200,
+    "priority": 5,
+    "enabled": true
+  },
+  {
+    "id": 2,
+    "name": "Type-B",
+    "description": "B类产品 - 精密件",
+    "manufacturingDurationMs": 1800,
+    "priority": 4,
+    "enabled": true
+  },
+  {
+    "id": 3,
+    "name": "Type-C",
+    "description": "C类产品 - 定制件",
+    "manufacturingDurationMs": 2500,
+    "priority": 3,
+    "enabled": true
+  },
+  {
+    "id": 4,
+    "name": "Type-D",
+    "description": "D类产品 - 实验性产品（已暂停）",
+    "manufacturingDurationMs": 3000,
+    "priority": 2,
+    "enabled": false
+  },
+  {
+    "id": 5,
+    "name": "Type-E",
+    "description": "E类产品 - 高优先级加急件",
+    "manufacturingDurationMs": 800,
+    "priority": 10,
+    "enabled": true
+  }
+]

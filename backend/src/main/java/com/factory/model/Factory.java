@@ -4,42 +4,46 @@ package com.factory.model;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * 带锁机制的共享任务盒（生产者-消费者模型）。
- * <p>
- * 详细设计与同步语义请参见 {@code docs/project_design.md} 第 2、4.1 节。
- * </p>
- *
- * @author factory-sync
- * @version 1.0.0
- * @see <a href="../../docs/project_design.md">project_design.md</a>
- */
 public class Factory {
 
     private static final Logger logger = LoggerFactory.getLogger(Factory.class);
 
-    /** Production type ID stored in the task box. */
+    private final ProductionTypeRegistry registry;
+
     private int pID;
 
-    /**
-     * Lock state: {@code false}=opened(empty), {@code true}=locked(full).
-     */
     private boolean lock = false;
 
-    /**
-     * Manager 将生产类型放入任务盒。
-     * <p>
-     * 非显而易见行为：
-     * <ul>
-     *   <li>使用 while 循环而非 if 判断，防止虚假唤醒（spurious wakeup）</li>
-     *   <li>中断时恢复中断标志位并直接返回，不再执行 put</li>
-     * </ul>
-     * </p>
-     *
-     * @param pID the production type ID (1..n)
-     */
+    public Factory() {
+        this.registry = null;
+    }
+
+    public Factory(ProductionTypeRegistry registry) {
+        this.registry = registry;
+    }
+
+    public ProductionTypeRegistry getRegistry() {
+        return registry;
+    }
+
     public synchronized void put(int pID) {
-        // Manager waits while lock is locked (box already has an unprocessed task)
+        if (registry != null) {
+            if (!registry.isValidId(pID)) {
+                String msg = String.format(
+                        "拒绝放入非法 pID=%d: 超出有效范围 1..%d（或未在注册表中定义）",
+                        pID, registry.getMaxId());
+                logger.error(msg);
+                throw new IllegalArgumentException(msg);
+            }
+            if (!registry.isEnabled(pID)) {
+                String msg = String.format(
+                        "拒绝放入已禁用的 pID=%d (%s)",
+                        pID, registry.getById(pID).getName());
+                logger.error(msg);
+                throw new IllegalArgumentException(msg);
+            }
+        }
+
         while (lock) {
             try {
                 logger.debug("经理等待中 - 任务盒已上锁（pID={} 尚未被处理）", this.pID);
@@ -51,33 +55,21 @@ public class Factory {
             }
         }
 
-        // Put the production type into the task box
         this.pID = pID;
-
-        // Lock the box after putting
         lock = true;
 
-        logger.info("【经理】放入生产类型 pID={} 到任务盒 → lock=true（上锁），调用 notify() 通知组长", pID);
+        if (registry != null) {
+            ProductionType pt = registry.getById(pID);
+            logger.info("【经理】放入生产类型 pID={} ({}) 优先级={} 到任务盒 → lock=true（上锁），调用 notify() 通知组长",
+                    pID, pt.getName(), pt.getPriority());
+        } else {
+            logger.info("【经理】放入生产类型 pID={} 到任务盒 → lock=true（上锁），调用 notify() 通知组长", pID);
+        }
 
-        // Inform the team leader
         notify();
     }
 
-    /**
-     * Team Leader 从任务盒取出生产类型。
-     * <p>
-     * 非显而易见行为：
-     * <ul>
-     *   <li>使用 while 循环而非 if 判断，防止虚假唤醒（spurious wakeup）</li>
-     *   <li>先开锁再读取 pID，顺序不可颠倒</li>
-     *   <li>中断时返回 {@code -1}，调用方需据此判断退出</li>
-     * </ul>
-     * </p>
-     *
-     * @return the production type ID, or {@code -1} if interrupted
-     */
     public synchronized int get() {
-        // Team leader waits if the box is empty (lock is opened, no task to get)
         while (!lock) {
             try {
                 logger.debug("组长等待中 - 任务盒为空（尚无任务），调用 wait() 阻塞");
@@ -89,17 +81,18 @@ public class Factory {
             }
         }
 
-        // Team leader opens the lock with the unique key
         lock = false;
-
-        // Get the production type from the task box
         int result = this.pID;
 
-        logger.info("【组长】用钥匙开锁，从任务盒取出生产类型 pID={} → lock=false（开锁），调用 notify() 通知经理", result);
+        if (registry != null) {
+            ProductionType pt = registry.getById(result);
+            logger.info("【组长】用钥匙开锁，从任务盒取出生产类型 pID={} ({}) 制造时长={}ms → lock=false（开锁），调用 notify() 通知经理",
+                    result, pt.getName(), pt.getManufacturingDurationMs());
+        } else {
+            logger.info("【组长】用钥匙开锁，从任务盒取出生产类型 pID={} → lock=false（开锁），调用 notify() 通知经理", result);
+        }
 
-        // Notify the manager that the box is now empty
         notify();
-
         return result;
     }
 }

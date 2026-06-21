@@ -1,6 +1,8 @@
 package com.factory.process;
 
+import com.factory.config.ProductionStrategy;
 import com.factory.model.Factory;
+import com.factory.model.ProductionTypeRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -161,5 +163,71 @@ class ManagerProcessTest {
     @DisplayName("ManagerProcess 实现 Runnable 接口")
     void testImplementsRunnable() {
         assertTrue(Runnable.class.isAssignableFrom(ManagerProcess.class));
+    }
+
+    @Test
+    @DisplayName("新构造函数：factory/registry/strategy 任一 null 应抛出 IllegalArgumentException")
+    void testNewConstructorNullArgs() {
+        Factory factory = new Factory();
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        ProductionStrategy strategy = ProductionStrategy.sequential();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new ManagerProcess(null, registry, strategy));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ManagerProcess(factory, null, strategy));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ManagerProcess(factory, registry, null));
+    }
+
+    @Test
+    @DisplayName("新构造函数：有效参数应正常创建")
+    void testNewConstructorValidArgs() {
+        Factory factory = new Factory();
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        ProductionStrategy strategy = ProductionStrategy.sequential();
+        assertDoesNotThrow(() -> new ManagerProcess(factory, registry, strategy));
+    }
+
+    @Test
+    @DisplayName("新构造函数：priority 策略下 pID 应按优先级循环")
+    void testPriorityStrategyCycling() throws InterruptedException {
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        Factory factory = new Factory(registry);
+        int totalPuts = 6;
+
+        List<Integer> producedValues = new ArrayList<>();
+        CountDownLatch allProduced = new CountDownLatch(totalPuts);
+
+        ManagerProcess manager = new ManagerProcess(factory, registry, ProductionStrategy.priorityFirst()) {
+            @Override
+            public void run() {
+                var it = ProductionStrategy.priorityFirst().createIterator(registry);
+                for (int i = 0; i < totalPuts; i++) {
+                    Integer pid = it.next();
+                    factory.put(pid);
+                    producedValues.add(pid);
+                    allProduced.countDown();
+                }
+            }
+        };
+
+        Thread consumer = new Thread(() -> {
+            for (int i = 0; i < totalPuts; i++) {
+                factory.get();
+            }
+        }, "consumer");
+
+        Thread producer = new Thread(manager, "producer");
+
+        consumer.start();
+        producer.start();
+
+        assertTrue(allProduced.await(5, TimeUnit.SECONDS));
+        producer.join(2000);
+        consumer.join(2000);
+
+        List<Integer> expected = List.of(1, 2, 3, 1, 2, 3);
+        assertEquals(expected, producedValues);
     }
 }

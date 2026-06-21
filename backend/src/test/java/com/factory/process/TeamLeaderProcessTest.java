@@ -1,6 +1,7 @@
 package com.factory.process;
 
 import com.factory.model.Factory;
+import com.factory.model.ProductionTypeRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -170,5 +171,22 @@ class TeamLeaderProcessTest {
             assertEquals(i + 1, consumedValues.get(i),
                     "第 " + (i + 1) + " 个任务应为 pID=" + (i + 1));
         }
+    }
+
+    @Test
+    @DisplayName("新构造函数：factory 为 null 应抛出 IllegalArgumentException")
+    void testNewConstructorNullFactory() {
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        assertThrows(IllegalArgumentException.class,
+                () -> new TeamLeaderProcess(null, registry));
+    }
+
+    @Test
+    @DisplayName("新构造函数：有效参数应正常创建")
+    void testNewConstructorValidArgs() {
+        Factory factory = new Factory();
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        assertDoesNotThrow(() -> new TeamLeaderProcess(factory, registry));
+        assertDoesNotThrow(() -> new TeamLeaderProcess(factory, null));
     }
 }

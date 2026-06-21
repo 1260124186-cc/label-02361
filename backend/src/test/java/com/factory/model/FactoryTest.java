@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -325,5 +326,86 @@ class FactoryTest {
         assertTrue(allDone.await(5, TimeUnit.SECONDS), "快速交替操作不应死锁");
         producer.join(2000);
         consumer.join(2000);
+    }
+
+    // ========== 带 ProductionTypeRegistry 的 pID 校验测试 ==========
+
+    @Test
+    @DisplayName("put 非法 pID (超出范围) 应抛出 IllegalArgumentException")
+    void testPutInvalidIdWithRegistry() {
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        Factory factory = new Factory(registry);
+
+        assertThrows(IllegalArgumentException.class, () -> factory.put(0));
+        assertThrows(IllegalArgumentException.class, () -> factory.put(4));
+        assertThrows(IllegalArgumentException.class, () -> factory.put(-1));
+        assertThrows(IllegalArgumentException.class, () -> factory.put(999));
+    }
+
+    @Test
+    @DisplayName("put 已禁用的 pID 应抛出 IllegalArgumentException")
+    void testPutDisabledIdWithRegistry() {
+        List<ProductionType> types = List.of(
+                new ProductionType(1, "A", "", 100L, 1, true),
+                new ProductionType(2, "B", "", 200L, 2, false),
+                new ProductionType(3, "C", "", 300L, 3, true)
+        );
+        ProductionTypeRegistry registry = new ProductionTypeRegistry(types);
+        Factory factory = new Factory(registry);
+
+        assertDoesNotThrow(() -> factory.put(1));
+        factory.get();
+
+        assertThrows(IllegalArgumentException.class, () -> factory.put(2));
+
+        assertDoesNotThrow(() -> factory.put(3));
+        factory.get();
+    }
+
+    @Test
+    @DisplayName("无 registry 时 put 不应校验 pID (向后兼容)")
+    void testPutNoRegistryNoValidation() {
+        Factory factory = new Factory();
+        assertDoesNotThrow(() -> factory.put(0));
+        factory.get();
+        assertDoesNotThrow(() -> factory.put(-5));
+        factory.get();
+        assertDoesNotThrow(() -> factory.put(9999));
+        factory.get();
+    }
+
+    @Test
+    @DisplayName("带 registry 的正常 put/get 流程")
+    void testPutGetWithRegistry() throws InterruptedException {
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        Factory factory = new Factory(registry);
+
+        AtomicInteger result = new AtomicInteger(-1);
+        CountDownLatch getDone = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get());
+            getDone.countDown();
+        }, "consumer");
+        consumer.start();
+
+        Thread.sleep(50);
+        factory.put(2);
+
+        assertTrue(getDone.await(2, TimeUnit.SECONDS));
+        assertEquals(2, result.get());
+        consumer.join(2000);
+    }
+
+    @Test
+    @DisplayName("Factory 构造函数：带 registry 和不带 registry 都应正常")
+    void testFactoryConstructors() {
+        assertDoesNotThrow(() -> new Factory());
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        Factory factory = new Factory(registry);
+        assertSame(registry, factory.getRegistry());
+
+        Factory noRegistry = new Factory();
+        assertNull(noRegistry.getRegistry());
     }
 }
