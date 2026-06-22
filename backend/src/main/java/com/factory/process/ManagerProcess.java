@@ -5,6 +5,8 @@ import com.factory.config.AppConfig;
 import com.factory.config.ProductionStrategy;
 import com.factory.model.Factory;
 import com.factory.model.ProductionTypeRegistry;
+import com.factory.strategy.ProductionScheduleStrategy;
+import com.factory.strategy.RoundRobinStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,8 +20,10 @@ public class ManagerProcess implements Runnable {
     private final Factory factory;
     private final ProductionTypeRegistry registry;
     private final ProductionStrategy strategy;
+    private final ProductionScheduleStrategy scheduleStrategy;
     private final int legacyMaxProductionTypes;
     private final boolean legacyMode;
+    private final boolean scheduleStrategyMode;
     private final long intervalMs;
 
     public ManagerProcess(Factory factory, int maxProductionTypes) {
@@ -39,8 +43,10 @@ public class ManagerProcess implements Runnable {
         this.factory = factory;
         this.registry = null;
         this.strategy = null;
+        this.scheduleStrategy = null;
         this.legacyMaxProductionTypes = maxProductionTypes;
         this.legacyMode = true;
+        this.scheduleStrategyMode = false;
         this.intervalMs = intervalMs;
     }
 
@@ -68,8 +74,41 @@ public class ManagerProcess implements Runnable {
         this.factory = factory;
         this.registry = registry;
         this.strategy = strategy;
+        this.scheduleStrategy = null;
         this.legacyMaxProductionTypes = registry.getMaxId();
         this.legacyMode = false;
+        this.scheduleStrategyMode = false;
+        this.intervalMs = intervalMs;
+    }
+
+    public ManagerProcess(Factory factory, ProductionTypeRegistry registry, ProductionScheduleStrategy scheduleStrategy) {
+        this(factory, registry, scheduleStrategy, AppConfig.DEFAULT_MANAGER_INTERVAL_MS);
+    }
+
+    public ManagerProcess(Factory factory, ProductionTypeRegistry registry, ProductionScheduleStrategy scheduleStrategy, AppConfig config) {
+        this(factory, registry, scheduleStrategy, config.getManagerIntervalMs());
+    }
+
+    public ManagerProcess(Factory factory, ProductionTypeRegistry registry, ProductionScheduleStrategy scheduleStrategy, long intervalMs) {
+        if (factory == null) {
+            throw new IllegalArgumentException("Factory must not be null");
+        }
+        if (registry == null) {
+            throw new IllegalArgumentException("ProductionTypeRegistry must not be null");
+        }
+        if (scheduleStrategy == null) {
+            throw new IllegalArgumentException("ProductionScheduleStrategy must not be null");
+        }
+        if (intervalMs < 0) {
+            throw new IllegalArgumentException("intervalMs must be >= 0, got: " + intervalMs);
+        }
+        this.factory = factory;
+        this.registry = registry;
+        this.strategy = null;
+        this.scheduleStrategy = scheduleStrategy;
+        this.legacyMaxProductionTypes = registry.getMaxId();
+        this.legacyMode = false;
+        this.scheduleStrategyMode = true;
         this.intervalMs = intervalMs;
     }
 
@@ -77,6 +116,8 @@ public class ManagerProcess implements Runnable {
     public void run() {
         if (legacyMode) {
             runLegacy();
+        } else if (scheduleStrategyMode) {
+            runWithScheduleStrategy();
         } else {
             runWithStrategy();
         }
@@ -167,7 +208,64 @@ public class ManagerProcess implements Runnable {
         logger.info("经理进程已终止");
     }
 
+    private void runWithScheduleStrategy() {
+        logger.info("经理进程启动 - 排产策略={}，已启用生产类型 {} 个",
+                scheduleStrategy.getName(), registry.getEnabled().size());
+        registry.logAllTypes();
+
+        int dayCount = 0;
+
+        while (!Thread.currentThread().isInterrupted()) {
+            dayCount++;
+
+            Integer nextPID;
+            try {
+                nextPID = scheduleStrategy.nextPID(registry);
+            } catch (NoSuchElementException e) {
+                logger.error("[第 {} 天] 排产策略无可用生产类型，终止循环", dayCount, e);
+                break;
+            }
+
+            if (nextPID == null || !registry.isEnabled(nextPID)) {
+                logger.warn("[第 {} 天] pID={} 无效或已被禁用，跳过", dayCount, nextPID);
+                try {
+                    Thread.sleep(intervalMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
+                    break;
+                }
+                continue;
+            }
+
+            logger.info("[第 {} 天] 经理准备分配生产类型 pID={} ({}) 优先级={}",
+                    dayCount, nextPID,
+                    registry.getById(nextPID).getName(),
+                    registry.getById(nextPID).getPriority());
+
+            try {
+                factory.put(nextPID);
+            } catch (IllegalArgumentException e) {
+                logger.error("[第 {} 天] 放入任务盒失败: {}", dayCount, e.getMessage());
+            }
+
+            try {
+                Thread.sleep(intervalMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
+                break;
+            }
+        }
+
+        logger.info("经理进程已终止");
+    }
+
     public long getIntervalMs() {
         return intervalMs;
+    }
+
+    public ProductionScheduleStrategy getScheduleStrategy() {
+        return scheduleStrategy;
     }
 }

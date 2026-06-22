@@ -33,6 +33,7 @@ class AppConfigTest {
         System.clearProperty("capacity.wait.timeout.ms");
         System.clearProperty("task.use.thread.pool");
         System.clearProperty("task.thread.pool.size");
+        System.clearProperty("schedule.strategy");
     }
 
     @Test
@@ -51,6 +52,7 @@ class AppConfigTest {
         assertEquals(AppConfig.DEFAULT_CAPACITY_WAIT_TIMEOUT_MS, config.getCapacityWaitTimeoutMs());
         assertEquals(AppConfig.DEFAULT_USE_THREAD_POOL, config.isUseThreadPool());
         assertEquals(AppConfig.DEFAULT_THREAD_POOL_SIZE, config.getThreadPoolSize());
+        assertEquals(AppConfig.DEFAULT_SCHEDULE_STRATEGY, config.getScheduleStrategy());
     }
 
     @Test
@@ -165,7 +167,8 @@ class AppConfigTest {
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_CAPACITY_WAIT_TIMEOUT_MS));
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_USE_THREAD_POOL));
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_THREAD_POOL_SIZE));
-        assertEquals(11, config.getAllKeys().size());
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_SCHEDULE_STRATEGY));
+        assertEquals(12, config.getAllKeys().size());
     }
 
     @Test
@@ -200,9 +203,10 @@ class AppConfigTest {
 
         Map<String, Object> map = config.getAllConfigAsMap();
 
-        assertEquals(11, map.size());
+        assertEquals(12, map.size());
         assertEquals(777L, map.get(AppConfig.KEY_MANAGER_INTERVAL_MS));
         assertEquals(AppConfig.DEFAULT_TEAM_LEADER_MANUFACTURING_MS, map.get(AppConfig.KEY_TEAM_LEADER_MANUFACTURING_MS));
+        assertEquals(AppConfig.DEFAULT_SCHEDULE_STRATEGY, map.get(AppConfig.KEY_SCHEDULE_STRATEGY));
     }
 
     @Test

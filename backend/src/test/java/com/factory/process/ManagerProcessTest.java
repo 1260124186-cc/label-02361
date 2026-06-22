@@ -3,6 +3,8 @@ package com.factory.process;
 import com.factory.config.ProductionStrategy;
 import com.factory.model.Factory;
 import com.factory.model.ProductionTypeRegistry;
+import com.factory.strategy.ProductionScheduleStrategy;
+import com.factory.strategy.RoundRobinStrategy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -177,7 +179,7 @@ class ManagerProcessTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new ManagerProcess(factory, null, strategy));
         assertThrows(IllegalArgumentException.class,
-                () -> new ManagerProcess(factory, registry, null));
+                () -> new ManagerProcess(factory, registry, (ProductionStrategy) null));
     }
 
     @Test
@@ -205,6 +207,74 @@ class ManagerProcessTest {
                 var it = ProductionStrategy.priorityFirst().createIterator(registry);
                 for (int i = 0; i < totalPuts; i++) {
                     Integer pid = it.next();
+                    factory.put(pid);
+                    producedValues.add(pid);
+                    allProduced.countDown();
+                }
+            }
+        };
+
+        Thread consumer = new Thread(() -> {
+            for (int i = 0; i < totalPuts; i++) {
+                factory.get();
+            }
+        }, "consumer");
+
+        Thread producer = new Thread(manager, "producer");
+
+        consumer.start();
+        producer.start();
+
+        assertTrue(allProduced.await(5, TimeUnit.SECONDS));
+        producer.join(2000);
+        consumer.join(2000);
+
+        List<Integer> expected = List.of(1, 2, 3, 1, 2, 3);
+        assertEquals(expected, producedValues);
+    }
+
+    @Test
+    @DisplayName("ProductionScheduleStrategy 构造函数：任一 null 应抛出 IllegalArgumentException")
+    void testScheduleStrategyConstructorNullArgs() {
+        Factory factory = new Factory();
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        ProductionScheduleStrategy strategy = new RoundRobinStrategy();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new ManagerProcess(null, registry, strategy));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ManagerProcess(factory, null, strategy));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ManagerProcess(factory, registry, (ProductionScheduleStrategy) null));
+    }
+
+    @Test
+    @DisplayName("ProductionScheduleStrategy 构造函数：有效参数应正常创建")
+    void testScheduleStrategyConstructorValidArgs() {
+        Factory factory = new Factory();
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        ProductionScheduleStrategy strategy = new RoundRobinStrategy();
+        ManagerProcess manager = assertDoesNotThrow(() ->
+                new ManagerProcess(factory, registry, strategy));
+        assertEquals(strategy, manager.getScheduleStrategy());
+    }
+
+    @Test
+    @DisplayName("ProductionScheduleStrategy: RoundRobin 策略下 pID 应循环")
+    void testScheduleStrategyRoundRobinCycling() throws InterruptedException {
+        ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
+        Factory factory = new Factory(registry);
+        int totalPuts = 6;
+
+        List<Integer> producedValues = new ArrayList<>();
+        CountDownLatch allProduced = new CountDownLatch(totalPuts);
+
+        ManagerProcess manager = new ManagerProcess(factory, registry, new RoundRobinStrategy()) {
+            @Override
+            public void run() {
+                ProductionScheduleStrategy strategy = getScheduleStrategy();
+                for (int i = 0; i < totalPuts; i++) {
+                    Integer pid = strategy.nextPID(registry);
                     factory.put(pid);
                     producedValues.add(pid);
                     allProduced.countDown();

@@ -26,6 +26,7 @@ public class AppConfig {
     public static final String KEY_CAPACITY_WAIT_TIMEOUT_MS = "capacity.wait.timeout.ms";
     public static final String KEY_USE_THREAD_POOL = "task.use.thread.pool";
     public static final String KEY_THREAD_POOL_SIZE = "task.thread.pool.size";
+    public static final String KEY_SCHEDULE_STRATEGY = "schedule.strategy";
 
     public static final long DEFAULT_MANAGER_INTERVAL_MS = 1000L;
     public static final long DEFAULT_TEAM_LEADER_MANUFACTURING_MS = 1500L;
@@ -38,6 +39,7 @@ public class AppConfig {
     public static final long DEFAULT_CAPACITY_WAIT_TIMEOUT_MS = 0L;
     public static final boolean DEFAULT_USE_THREAD_POOL = true;
     public static final int DEFAULT_THREAD_POOL_SIZE = 5;
+    public static final String DEFAULT_SCHEDULE_STRATEGY = "round-robin";
 
     public static final String ENV_MANAGER_INTERVAL_MS = "MANAGER_INTERVAL_MS";
     public static final String ENV_TEAM_LEADER_MANUFACTURING_MS = "TEAM_LEADER_MANUFACTURING_MS";
@@ -50,6 +52,7 @@ public class AppConfig {
     public static final String ENV_CAPACITY_WAIT_TIMEOUT_MS = "CAPACITY_WAIT_TIMEOUT_MS";
     public static final String ENV_USE_THREAD_POOL = "USE_THREAD_POOL";
     public static final String ENV_THREAD_POOL_SIZE = "THREAD_POOL_SIZE";
+    public static final String ENV_SCHEDULE_STRATEGY = "SCHEDULE_STRATEGY";
 
     public static final String PROPERTIES_FILE = "application.properties";
 
@@ -142,6 +145,11 @@ public class AppConfig {
                 ConfigValue.intValue(KEY_THREAD_POOL_SIZE,
                         resolveInt(KEY_THREAD_POOL_SIZE, ENV_THREAD_POOL_SIZE, DEFAULT_THREAD_POOL_SIZE),
                         DEFAULT_THREAD_POOL_SIZE));
+
+        configValues.put(KEY_SCHEDULE_STRATEGY,
+                ConfigValue.stringValue(KEY_SCHEDULE_STRATEGY,
+                        resolveString(KEY_SCHEDULE_STRATEGY, ENV_SCHEDULE_STRATEGY, DEFAULT_SCHEDULE_STRATEGY),
+                        DEFAULT_SCHEDULE_STRATEGY));
     }
 
     private String resolveString(String propertyKey, String envKey, String defaultValue) {
@@ -280,6 +288,10 @@ public class AppConfig {
         return (Integer) configValues.get(KEY_THREAD_POOL_SIZE).getValue();
     }
 
+    public String getScheduleStrategy() {
+        return (String) configValues.get(KEY_SCHEDULE_STRATEGY).getValue();
+    }
+
     private void applyLogLevel() {
         String levelStr = getLogLevel();
         try {
@@ -314,6 +326,7 @@ public class AppConfig {
             case KEY_CAPACITY_WAIT_TIMEOUT_MS -> resolveSource(KEY_CAPACITY_WAIT_TIMEOUT_MS, ENV_CAPACITY_WAIT_TIMEOUT_MS);
             case KEY_USE_THREAD_POOL -> resolveSource(KEY_USE_THREAD_POOL, ENV_USE_THREAD_POOL);
             case KEY_THREAD_POOL_SIZE -> resolveSource(KEY_THREAD_POOL_SIZE, ENV_THREAD_POOL_SIZE);
+            case KEY_SCHEDULE_STRATEGY -> resolveSource(KEY_SCHEDULE_STRATEGY, ENV_SCHEDULE_STRATEGY);
             default -> "未知";
         };
     }
@@ -383,7 +396,8 @@ public class AppConfig {
                 ENV_CAPACITY_STRATEGY,
                 ENV_CAPACITY_WAIT_TIMEOUT_MS,
                 ENV_USE_THREAD_POOL,
-                ENV_THREAD_POOL_SIZE
+                ENV_THREAD_POOL_SIZE,
+                ENV_SCHEDULE_STRATEGY
         );
 
         Map<String, String> result = new LinkedHashMap<>();
