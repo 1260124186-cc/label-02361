@@ -6,6 +6,7 @@ import com.factory.config.ProductionStrategy;
 import com.factory.config.ProductionTypeConfigLoader;
 import com.factory.model.Factory;
 import com.factory.model.ProductionTypeRegistry;
+import com.factory.process.FactoryShutdownHook;
 import com.factory.process.ManagerProcess;
 import com.factory.process.TeamLeaderProcess;
 import org.slf4j.Logger;
@@ -47,6 +48,7 @@ public class Main {
         logger.info("    -Dteam-leader.manufacturing.ms=1500  组长制造耗时(ms)");
         logger.info("    -Dshutdown.join.timeout.ms=3000      关闭等待超时(ms)");
         logger.info("    -Dproduction.types=5                 生产类型数量");
+        logger.info("    -Ddrain.on.shutdown=false            关闭时排空任务盒");
         logger.info("    -Dlog.level=INFO                     日志级别");
         logger.info("========================================================");
         logger.info("  按 Ctrl+C 停止系统");
@@ -65,26 +67,12 @@ public class Main {
                 new TeamLeaderProcess(factory, registry, appConfig), "组长");
 
         long shutdownTimeoutMs = appConfig.getShutdownJoinTimeoutMs();
+        boolean drainOnShutdown = appConfig.isDrainOnShutdown();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("");
-            logger.info("========================================================");
-            logger.info("  收到关闭信号 - 正在停止所有进程...");
-            logger.info("  等待超时: {}ms", shutdownTimeoutMs);
-            logger.info("========================================================");
+        FactoryShutdownHook shutdownHook = new FactoryShutdownHook(
+                managerThread, teamLeaderThread, factory, shutdownTimeoutMs, drainOnShutdown);
 
-            managerThread.interrupt();
-            teamLeaderThread.interrupt();
-
-            try {
-                managerThread.join(shutdownTimeoutMs);
-                teamLeaderThread.join(shutdownTimeoutMs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-
-            logger.info("所有进程已停止，系统关闭完成。");
-        }, "关闭钩子"));
+        Runtime.getRuntime().addShutdownHook(new Thread(shutdownHook, "关闭钩子"));
 
         managerThread.start();
         teamLeaderThread.start();

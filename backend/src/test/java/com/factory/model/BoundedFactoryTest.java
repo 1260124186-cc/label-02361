@@ -1,5 +1,8 @@
 package com.factory.model;
 
+import com.factory.model.FactoryResult;
+import com.factory.model.GetResult;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -47,7 +50,7 @@ class BoundedFactoryTest {
         CountDownLatch getDone = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             getDone.countDown();
         }, "consumer");
         consumer.start();
@@ -75,9 +78,9 @@ class BoundedFactoryTest {
         assertEquals(3, factory.getCount());
         assertTrue(factory.isFull());
 
-        assertEquals(10, factory.get());
-        assertEquals(20, factory.get());
-        assertEquals(30, factory.get());
+        assertEquals(10, factory.get().getValue());
+        assertEquals(20, factory.get().getValue());
+        assertEquals(30, factory.get().getValue());
 
         assertTrue(factory.isEmpty());
         assertEquals(0, factory.getCount());
@@ -124,14 +127,14 @@ class BoundedFactoryTest {
         Thread.sleep(300);
         assertFalse(thirdPutCompleted.get(), "满盒时第3次 put() 应该阻塞");
 
-        int taken = factory.get();
+        int taken = factory.get().getValue();
         assertEquals(1, taken, "应该先取走最先放入的 1");
         producer.join(2000);
         assertTrue(thirdPutCompleted.get(), "get() 后被阻塞的 put() 应该完成");
 
         assertEquals(2, factory.getCount());
-        assertEquals(2, factory.get());
-        assertEquals(3, factory.get());
+        assertEquals(2, factory.get().getValue());
+        assertEquals(3, factory.get().getValue());
         assertTrue(factory.isEmpty());
     }
 
@@ -150,7 +153,7 @@ class BoundedFactoryTest {
 
             for (int i = 1; i <= capacity; i++) {
                 int expected = c * 10 + i;
-                int actual = factory.get();
+                int actual = factory.get().getValue();
                 assertEquals(expected, actual, "第 " + c + " 轮取出顺序错误");
             }
             assertTrue(factory.isEmpty(), "第 " + c + " 轮清空后应为空");
@@ -160,11 +163,11 @@ class BoundedFactoryTest {
     // ========== 中断处理测试 ==========
 
     @Test
-    @DisplayName("get 在 wait 期间被中断应返回 -1")
+    @DisplayName("get 在 wait 期间被中断应返回中断状态")
     void testGetInterruptedWhileWaiting() throws InterruptedException {
         BoundedFactory factory = new BoundedFactory(3);
 
-        AtomicReference<Integer> result = new AtomicReference<>(0);
+        AtomicReference<GetResult> result = new AtomicReference<>(null);
         CountDownLatch started = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
@@ -179,7 +182,62 @@ class BoundedFactoryTest {
         consumer.interrupt();
         consumer.join(2000);
 
-        assertEquals(-1, result.get(), "被中断时 get() 应返回 -1");
+        assertTrue(result.get().isInterrupted(), "被中断时 get() 应返回中断状态");
+    }
+
+    @Test
+    @DisplayName("shutdown 后 get 在空队列应返回 invalid（统一中断语义）")
+    void testGetReturnsInvalidAfterShutdown() throws InterruptedException {
+        BoundedFactory factory = new BoundedFactory(3);
+
+        AtomicReference<GetResult> result = new AtomicReference<>(null);
+        CountDownLatch started = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            started.countDown();
+            result.set(factory.get());
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(started.await(1, TimeUnit.SECONDS));
+        Thread.sleep(100);
+
+        factory.shutdown();
+
+        consumer.join(2000);
+
+        assertTrue(result.get().isInvalid(), "关闭时空队列 get() 应返回 invalid");
+        assertFalse(result.get().isInterrupted(), "关闭不是中断，不应返回 interrupted");
+    }
+
+    @Test
+    @DisplayName("shutdown 后 get 在非空队列仍可正常取出")
+    void testGetStillWorksWithItemsAfterShutdown() throws InterruptedException {
+        BoundedFactory factory = new BoundedFactory(5);
+        factory.put(10);
+        factory.put(20);
+
+        factory.shutdown();
+
+        assertEquals(10, factory.get().getValue(), "关闭后队列中有数据仍可取出");
+        assertEquals(20, factory.get().getValue(), "关闭后队列中有数据仍可取出");
+        assertTrue(factory.isEmpty());
+
+        AtomicReference<GetResult> result = new AtomicReference<>(null);
+        CountDownLatch started = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            started.countDown();
+            result.set(factory.get());
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(started.await(1, TimeUnit.SECONDS));
+        Thread.sleep(100);
+
+        consumer.join(2000);
+
+        assertTrue(result.get().isInvalid(), "队列排空后 get() 应返回 invalid");
     }
 
     @Test
@@ -250,8 +308,9 @@ class BoundedFactoryTest {
         for (int c = 0; c < consumers; c++) {
             Thread t = new Thread(() -> {
                 while (allConsumed.getCount() > 0) {
-                    int val = factory.get();
-                    if (val != -1) {
+                    GetResult gr = factory.get();
+                    if (gr.isSuccess()) {
+                        int val = gr.getValue();
                         consumedSum.addAndGet(val);
                         synchronized (consumedOrder.get()) {
                             consumedOrder.get().add(val);
@@ -350,7 +409,7 @@ class BoundedFactoryTest {
         factory.put(2);
         assertEquals(2, factory.getCount());
 
-        assertEquals(1, factory.get());
+        assertEquals(1, factory.get().getValue());
         assertEquals(1, factory.getCount());
 
         factory.put(3);
@@ -358,8 +417,8 @@ class BoundedFactoryTest {
         factory.put(5);
         assertEquals(4, factory.getCount());
 
-        assertEquals(2, factory.get());
-        assertEquals(3, factory.get());
+        assertEquals(2, factory.get().getValue());
+        assertEquals(3, factory.get().getValue());
         assertEquals(2, factory.getCount());
         assertFalse(factory.isEmpty());
         assertFalse(factory.isFull());
@@ -368,19 +427,19 @@ class BoundedFactoryTest {
     // ========== ProductionTypeRegistry 校验测试 ==========
 
     @Test
-    @DisplayName("put 非法 pID (超出范围) 应抛出 IllegalArgumentException")
+    @DisplayName("put 非法 pID (超出范围) 应返回 FactoryResult.INVALID")
     void testPutInvalidIdWithRegistry() {
         ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
         BoundedFactory factory = new BoundedFactory(registry, 5);
 
-        assertThrows(IllegalArgumentException.class, () -> factory.put(0));
-        assertThrows(IllegalArgumentException.class, () -> factory.put(4));
-        assertThrows(IllegalArgumentException.class, () -> factory.put(-1));
+        assertEquals(FactoryResult.INVALID, factory.put(0));
+        assertEquals(FactoryResult.INVALID, factory.put(4));
+        assertEquals(FactoryResult.INVALID, factory.put(-1));
         assertEquals(0, factory.getCount(), "非法 put 不应改变 count");
     }
 
     @Test
-    @DisplayName("put 已禁用的 pID 应抛出 IllegalArgumentException")
+    @DisplayName("put 已禁用的 pID 应返回 FactoryResult.INVALID")
     void testPutDisabledIdWithRegistry() {
         List<ProductionType> types = List.of(
                 new ProductionType(1, "A", "", 100L, 1, true),
@@ -390,9 +449,9 @@ class BoundedFactoryTest {
         ProductionTypeRegistry registry = new ProductionTypeRegistry(types);
         BoundedFactory factory = new BoundedFactory(registry, 3);
 
-        assertDoesNotThrow(() -> factory.put(1));
-        assertThrows(IllegalArgumentException.class, () -> factory.put(2));
-        assertDoesNotThrow(() -> factory.put(3));
+        assertEquals(FactoryResult.SUCCESS, factory.put(1));
+        assertEquals(FactoryResult.INVALID, factory.put(2));
+        assertEquals(FactoryResult.SUCCESS, factory.put(3));
 
         assertEquals(2, factory.getCount());
     }
@@ -407,9 +466,9 @@ class BoundedFactoryTest {
         factory.put(4);
         factory.put(1);
 
-        assertEquals(2, factory.get());
-        assertEquals(4, factory.get());
-        assertEquals(1, factory.get());
+        assertEquals(2, factory.get().getValue());
+        assertEquals(4, factory.get().getValue());
+        assertEquals(1, factory.get().getValue());
         assertTrue(factory.isEmpty());
     }
 

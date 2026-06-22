@@ -2,6 +2,8 @@ package com.factory.process;
 
 import com.factory.config.ProductionStrategy;
 import com.factory.model.Factory;
+import com.factory.model.FactoryResult;
+import com.factory.model.GetResult;
 import com.factory.model.ProductionTypeRegistry;
 import com.factory.strategy.ProductionScheduleStrategy;
 import com.factory.strategy.RoundRobinStrategy;
@@ -72,7 +74,7 @@ class ManagerProcessTest {
 
         Thread consumer = new Thread(() -> {
             for (int i = 0; i < totalPuts; i++) {
-                factory.get();
+                factory.get().getValue();
             }
         }, "consumer");
 
@@ -99,8 +101,8 @@ class ManagerProcessTest {
         AtomicBoolean consumerDone = new AtomicBoolean(false);
         Thread consumer = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
-                int val = factory.get();
-                if (val == -1) break;
+                GetResult gr = factory.get();
+                if (!gr.isSuccess()) break;
             }
             consumerDone.set(true);
         }, "consumer");
@@ -143,7 +145,7 @@ class ManagerProcessTest {
 
         Thread consumer = new Thread(() -> {
             for (int i = 0; i < totalPuts; i++) {
-                factory.get();
+                factory.get().getValue();
             }
         }, "consumer");
 
@@ -216,7 +218,7 @@ class ManagerProcessTest {
 
         Thread consumer = new Thread(() -> {
             for (int i = 0; i < totalPuts; i++) {
-                factory.get();
+                factory.get().getValue();
             }
         }, "consumer");
 
@@ -284,7 +286,7 @@ class ManagerProcessTest {
 
         Thread consumer = new Thread(() -> {
             for (int i = 0; i < totalPuts; i++) {
-                factory.get();
+                factory.get().getValue();
             }
         }, "consumer");
 

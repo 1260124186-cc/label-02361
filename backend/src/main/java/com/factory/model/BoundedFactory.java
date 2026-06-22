@@ -1,4 +1,3 @@
-// -*- coding: utf-8 -*-
 package com.factory.model;
 
 import org.slf4j.Logger;
@@ -18,6 +17,8 @@ public class BoundedFactory {
     private final Queue<Integer> taskQueue;
 
     private int count;
+
+    private volatile boolean shuttingDown = false;
 
     private int totalPutCount;
     private int totalGetCount;
@@ -87,21 +88,22 @@ public class BoundedFactory {
         return teamLeaderWaitCount;
     }
 
-    public synchronized void put(int pID) {
+    public synchronized FactoryResult put(int pID) {
+        if (shuttingDown) {
+            logger.warn("拒绝放入 pID={}: 工厂正在关闭", pID);
+            return FactoryResult.INVALID;
+        }
+
         if (registry != null) {
             if (!registry.isValidId(pID)) {
-                String msg = String.format(
-                        "拒绝放入非法 pID=%d: 超出有效范围 1..%d（或未在注册表中定义）",
+                logger.warn("拒绝放入非法 pID={}: 超出有效范围 1..{}（或未在注册表中定义）",
                         pID, registry.getMaxId());
-                logger.error(msg);
-                throw new IllegalArgumentException(msg);
+                return FactoryResult.INVALID;
             }
             if (!registry.isEnabled(pID)) {
-                String msg = String.format(
-                        "拒绝放入已禁用的 pID=%d (%s)",
+                logger.warn("拒绝放入已禁用的 pID={} ({})",
                         pID, registry.getById(pID).getName());
-                logger.error(msg);
-                throw new IllegalArgumentException(msg);
+                return FactoryResult.INVALID;
             }
         }
 
@@ -116,8 +118,13 @@ public class BoundedFactory {
             } catch (InterruptedException e) {
                 managerWaitStartNanos = 0;
                 Thread.currentThread().interrupt();
-                logger.error("经理线程在等待时被中断", e);
-                return;
+                logger.warn("经理线程在等待时被中断");
+                return FactoryResult.INTERRUPTED;
+            }
+
+            if (shuttingDown) {
+                logger.warn("工厂正在关闭，取消放入 pID={}", pID);
+                return FactoryResult.INVALID;
             }
         }
 
@@ -135,10 +142,15 @@ public class BoundedFactory {
         }
 
         notifyAll();
+        return FactoryResult.SUCCESS;
     }
 
-    public synchronized int get() {
+    public synchronized GetResult get() {
         while (count == 0) {
+            if (shuttingDown) {
+                logger.info("工厂正在关闭且任务盒为空，组长退出");
+                return GetResult.invalid();
+            }
             try {
                 logger.debug("组长等待中 - 任务盒为空（count=0），调用 wait() 阻塞");
                 teamLeaderWaitCount++;
@@ -149,8 +161,8 @@ public class BoundedFactory {
             } catch (InterruptedException e) {
                 teamLeaderWaitStartNanos = 0;
                 Thread.currentThread().interrupt();
-                logger.error("组长线程在等待时被中断", e);
-                return -1;
+                logger.warn("组长线程在等待时被中断");
+                return GetResult.interrupted();
             }
         }
 
@@ -168,7 +180,17 @@ public class BoundedFactory {
         }
 
         notifyAll();
-        return result;
+        return GetResult.success(result);
+    }
+
+    public synchronized void shutdown() {
+        shuttingDown = true;
+        notifyAll();
+        logger.info("工厂已标记为关闭状态，notifyAll() 已调用");
+    }
+
+    public boolean isShuttingDown() {
+        return shuttingDown;
     }
 
     public synchronized FactoryMetrics createMetrics() {

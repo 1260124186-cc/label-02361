@@ -4,6 +4,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import com.factory.model.FactoryResult;
+import com.factory.model.GetResult;
+
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +28,7 @@ class FactoryTest {
         CountDownLatch getDone = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             getDone.countDown();
         }, "consumer");
         consumer.start();
@@ -101,7 +104,7 @@ class FactoryTest {
             CountDownLatch getDone = new CountDownLatch(1);
 
             Thread consumer = new Thread(() -> {
-                result.set(factory.get());
+                result.set(factory.get().getValue());
                 getDone.countDown();
             }, "consumer-" + i);
             consumer.start();
@@ -117,11 +120,11 @@ class FactoryTest {
     }
 
     @Test
-    @DisplayName("get 在 wait 期间被中断应返回 -1")
+    @DisplayName("get 在 wait 期间被中断应返回 interrupted")
     void testGetInterruptedWhileWaiting() throws InterruptedException {
         Factory factory = new Factory();
 
-        AtomicReference<Integer> result = new AtomicReference<>(0);
+        AtomicReference<GetResult> result = new AtomicReference<>(null);
         CountDownLatch started = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
@@ -136,7 +139,32 @@ class FactoryTest {
         consumer.interrupt();
         consumer.join(2000);
 
-        assertEquals(-1, result.get(), "被中断时 get() 应返回 -1");
+        assertTrue(result.get().isInterrupted(), "被中断时 get() 应返回 interrupted");
+    }
+
+    @Test
+    @DisplayName("shutdown 后 get 在空队列应返回 invalid（统一中断语义）")
+    void testGetReturnsInvalidAfterShutdown() throws InterruptedException {
+        Factory factory = new Factory();
+
+        AtomicReference<GetResult> result = new AtomicReference<>(null);
+        CountDownLatch started = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            started.countDown();
+            result.set(factory.get());
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(started.await(1, TimeUnit.SECONDS));
+        Thread.sleep(100);
+
+        factory.shutdown();
+
+        consumer.join(2000);
+
+        assertTrue(result.get().isInvalid(), "关闭时空队列 get() 应返回 invalid");
+        assertFalse(result.get().isInterrupted(), "关闭不是中断，不应返回 interrupted");
     }
 
     @Test
@@ -178,7 +206,7 @@ class FactoryTest {
         CountDownLatch done = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             done.countDown();
         }, "consumer");
         consumer.start();
@@ -199,7 +227,7 @@ class FactoryTest {
 
         Thread consumer = new Thread(() -> {
             consumerWaiting.countDown();
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             done.countDown();
         }, "consumer");
         consumer.start();
@@ -224,9 +252,9 @@ class FactoryTest {
 
         Thread consumer = new Thread(() -> {
             for (int i = 0; i < totalItems; i++) {
-                int val = factory.get();
-                if (val != -1) {
-                    consumedSum.addAndGet(val);
+                GetResult getResult = factory.get();
+                if (!getResult.isInterrupted()) {
+                    consumedSum.addAndGet(getResult.getValue());
                 }
                 allConsumed.countDown();
             }
@@ -265,7 +293,7 @@ class FactoryTest {
         CountDownLatch done = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             done.countDown();
         }, "consumer");
         consumer.start();
@@ -286,7 +314,7 @@ class FactoryTest {
         CountDownLatch done = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             done.countDown();
         }, "consumer");
         consumer.start();
@@ -331,19 +359,19 @@ class FactoryTest {
     // ========== 带 ProductionTypeRegistry 的 pID 校验测试 ==========
 
     @Test
-    @DisplayName("put 非法 pID (超出范围) 应抛出 IllegalArgumentException")
+    @DisplayName("put 非法 pID (超出范围) 应返回 INVALID")
     void testPutInvalidIdWithRegistry() {
         ProductionTypeRegistry registry = ProductionTypeRegistry.createDefault(3);
         Factory factory = new Factory(registry);
 
-        assertThrows(IllegalArgumentException.class, () -> factory.put(0));
-        assertThrows(IllegalArgumentException.class, () -> factory.put(4));
-        assertThrows(IllegalArgumentException.class, () -> factory.put(-1));
-        assertThrows(IllegalArgumentException.class, () -> factory.put(999));
+        assertEquals(FactoryResult.INVALID, factory.put(0));
+        assertEquals(FactoryResult.INVALID, factory.put(4));
+        assertEquals(FactoryResult.INVALID, factory.put(-1));
+        assertEquals(FactoryResult.INVALID, factory.put(999));
     }
 
     @Test
-    @DisplayName("put 已禁用的 pID 应抛出 IllegalArgumentException")
+    @DisplayName("put 已禁用的 pID 应返回 INVALID")
     void testPutDisabledIdWithRegistry() {
         List<ProductionType> types = List.of(
                 new ProductionType(1, "A", "", 100L, 1, true),
@@ -356,7 +384,7 @@ class FactoryTest {
         assertDoesNotThrow(() -> factory.put(1));
         factory.get();
 
-        assertThrows(IllegalArgumentException.class, () -> factory.put(2));
+        assertEquals(FactoryResult.INVALID, factory.put(2));
 
         assertDoesNotThrow(() -> factory.put(3));
         factory.get();
@@ -384,7 +412,7 @@ class FactoryTest {
         CountDownLatch getDone = new CountDownLatch(1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             getDone.countDown();
         }, "consumer");
         consumer.start();
@@ -422,7 +450,7 @@ class FactoryTest {
         AtomicInteger result = new AtomicInteger(-1);
 
         Thread consumer = new Thread(() -> {
-            result.set(factory.get());
+            result.set(factory.get().getValue());
             getDone.countDown();
         }, "consumer");
         consumer.start();
@@ -561,6 +589,39 @@ class FactoryTest {
         consumer.join(2000);
 
         assertEquals(1, factory.getTeamLeaderWaitCount(), "get 完成后等待次数不变");
+    }
+
+    @Test
+    @DisplayName("shutdown 后 put 应返回 INVALID（统一中断语义）")
+    void testPutReturnsInvalidAfterShutdown() {
+        Factory factory = new Factory();
+        factory.shutdown();
+
+        assertEquals(FactoryResult.INVALID, factory.put(1),
+                "关闭后 put() 应返回 INVALID");
+        assertFalse(factory.isLocked(), "关闭后 put 不应上锁");
+    }
+
+    @Test
+    @DisplayName("shutdown 后 get 在有待处理任务时仍可正常取出")
+    void testGetStillWorksWithLockedItemAfterShutdown() throws InterruptedException {
+        Factory factory = new Factory();
+        factory.put(42);
+
+        factory.shutdown();
+
+        AtomicInteger result = new AtomicInteger(-1);
+        CountDownLatch getDone = new CountDownLatch(1);
+
+        Thread consumer = new Thread(() -> {
+            result.set(factory.get().getValue());
+            getDone.countDown();
+        }, "consumer");
+        consumer.start();
+
+        assertTrue(getDone.await(2, TimeUnit.SECONDS));
+        assertEquals(42, result.get(), "关闭后仍可取出已放入的任务");
+        consumer.join(2000);
     }
 
     @Test

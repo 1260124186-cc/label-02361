@@ -27,6 +27,7 @@ public class AppConfig {
     public static final String KEY_USE_THREAD_POOL = "task.use.thread.pool";
     public static final String KEY_THREAD_POOL_SIZE = "task.thread.pool.size";
     public static final String KEY_SCHEDULE_STRATEGY = "schedule.strategy";
+    public static final String KEY_DRAIN_ON_SHUTDOWN = "drain.on.shutdown";
 
     public static final long DEFAULT_MANAGER_INTERVAL_MS = 1000L;
     public static final long DEFAULT_TEAM_LEADER_MANUFACTURING_MS = 1500L;
@@ -40,6 +41,7 @@ public class AppConfig {
     public static final boolean DEFAULT_USE_THREAD_POOL = true;
     public static final int DEFAULT_THREAD_POOL_SIZE = 5;
     public static final String DEFAULT_SCHEDULE_STRATEGY = "round-robin";
+    public static final boolean DEFAULT_DRAIN_ON_SHUTDOWN = false;
 
     public static final String ENV_MANAGER_INTERVAL_MS = "MANAGER_INTERVAL_MS";
     public static final String ENV_TEAM_LEADER_MANUFACTURING_MS = "TEAM_LEADER_MANUFACTURING_MS";
@@ -53,6 +55,7 @@ public class AppConfig {
     public static final String ENV_USE_THREAD_POOL = "USE_THREAD_POOL";
     public static final String ENV_THREAD_POOL_SIZE = "THREAD_POOL_SIZE";
     public static final String ENV_SCHEDULE_STRATEGY = "SCHEDULE_STRATEGY";
+    public static final String ENV_DRAIN_ON_SHUTDOWN = "DRAIN_ON_SHUTDOWN";
 
     public static final String PROPERTIES_FILE = "application.properties";
 
@@ -150,6 +153,11 @@ public class AppConfig {
                 ConfigValue.stringValue(KEY_SCHEDULE_STRATEGY,
                         resolveString(KEY_SCHEDULE_STRATEGY, ENV_SCHEDULE_STRATEGY, DEFAULT_SCHEDULE_STRATEGY),
                         DEFAULT_SCHEDULE_STRATEGY));
+
+        configValues.put(KEY_DRAIN_ON_SHUTDOWN,
+                ConfigValue.booleanValue(KEY_DRAIN_ON_SHUTDOWN,
+                        resolveBoolean(KEY_DRAIN_ON_SHUTDOWN, ENV_DRAIN_ON_SHUTDOWN, DEFAULT_DRAIN_ON_SHUTDOWN),
+                        DEFAULT_DRAIN_ON_SHUTDOWN));
     }
 
     private String resolveString(String propertyKey, String envKey, String defaultValue) {
@@ -292,6 +300,10 @@ public class AppConfig {
         return (String) configValues.get(KEY_SCHEDULE_STRATEGY).getValue();
     }
 
+    public boolean isDrainOnShutdown() {
+        return (Boolean) configValues.get(KEY_DRAIN_ON_SHUTDOWN).getValue();
+    }
+
     private void applyLogLevel() {
         String levelStr = getLogLevel();
         try {
@@ -327,6 +339,7 @@ public class AppConfig {
             case KEY_USE_THREAD_POOL -> resolveSource(KEY_USE_THREAD_POOL, ENV_USE_THREAD_POOL);
             case KEY_THREAD_POOL_SIZE -> resolveSource(KEY_THREAD_POOL_SIZE, ENV_THREAD_POOL_SIZE);
             case KEY_SCHEDULE_STRATEGY -> resolveSource(KEY_SCHEDULE_STRATEGY, ENV_SCHEDULE_STRATEGY);
+            case KEY_DRAIN_ON_SHUTDOWN -> resolveSource(KEY_DRAIN_ON_SHUTDOWN, ENV_DRAIN_ON_SHUTDOWN);
             default -> "未知";
         };
     }
@@ -397,7 +410,8 @@ public class AppConfig {
                 ENV_CAPACITY_WAIT_TIMEOUT_MS,
                 ENV_USE_THREAD_POOL,
                 ENV_THREAD_POOL_SIZE,
-                ENV_SCHEDULE_STRATEGY
+                ENV_SCHEDULE_STRATEGY,
+                ENV_DRAIN_ON_SHUTDOWN
         );
 
         Map<String, String> result = new LinkedHashMap<>();

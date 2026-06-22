@@ -4,6 +4,7 @@ package com.factory.process;
 import com.factory.config.AppConfig;
 import com.factory.model.CapacityStrategy;
 import com.factory.model.Factory;
+import com.factory.model.GetResult;
 import com.factory.model.ManufacturingTask;
 import com.factory.model.ProductionType;
 import com.factory.model.ProductionTypeRegistry;
@@ -138,11 +139,18 @@ public class TeamLeaderProcess implements Runnable {
 
         try {
             while (!Thread.currentThread().isInterrupted()) {
-                int pID = factory.get();
+                GetResult getResult = factory.get();
 
-                if (pID == -1) {
+                if (!getResult.isSuccess()) {
+                    if (getResult.isInterrupted()) {
+                        logger.info("组长进程收到中断信号 - 已完成 {} 个任务，正在关闭", taskCount);
+                    } else if (getResult.isInvalid()) {
+                        logger.info("组长进程收到关闭信号（工厂已关闭） - 已完成 {} 个任务，正在关闭", taskCount);
+                    }
                     break;
                 }
+
+                int pID = getResult.getValue();
 
                 taskCount++;
                 int taskId = taskIdCounter.incrementAndGet();

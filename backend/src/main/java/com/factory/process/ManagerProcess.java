@@ -1,9 +1,9 @@
-// -*- coding: utf-8 -*-
 package com.factory.process;
 
 import com.factory.config.AppConfig;
 import com.factory.config.ProductionStrategy;
 import com.factory.model.Factory;
+import com.factory.model.FactoryResult;
 import com.factory.model.ProductionTypeRegistry;
 import com.factory.strategy.ProductionScheduleStrategy;
 import com.factory.strategy.RoundRobinStrategy;
@@ -133,9 +133,16 @@ public class ManagerProcess implements Runnable {
             dayCount++;
             logger.info("[第 {} 天] 经理准备分配生产类型 pID={}", dayCount, pID);
 
-            factory.put(pID);
-
-            pID = (pID % legacyMaxProductionTypes) + 1;
+            FactoryResult putResult = factory.put(pID);
+            if (putResult == FactoryResult.SUCCESS) {
+                pID = (pID % legacyMaxProductionTypes) + 1;
+            } else if (putResult == FactoryResult.INTERRUPTED) {
+                logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
+                break;
+            } else {
+                logger.warn("[第 {} 天] 放入任务盒失败（pID={}，结果={}），不递增 pID，不 sleep", dayCount, pID, putResult);
+                break;
+            }
 
             try {
                 Thread.sleep(intervalMs);
@@ -190,10 +197,14 @@ public class ManagerProcess implements Runnable {
                     registry.getById(nextPID).getName(),
                     registry.getById(nextPID).getPriority());
 
-            try {
-                factory.put(nextPID);
-            } catch (IllegalArgumentException e) {
-                logger.error("[第 {} 天] 放入任务盒失败: {}", dayCount, e.getMessage());
+            FactoryResult putResult = factory.put(nextPID);
+            if (putResult != FactoryResult.SUCCESS) {
+                if (putResult == FactoryResult.INTERRUPTED) {
+                    logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
+                } else {
+                    logger.warn("[第 {} 天] 放入任务盒失败（pID={}，结果={}），不递增 pID，不 sleep", dayCount, nextPID, putResult);
+                }
+                break;
             }
 
             try {
@@ -243,10 +254,14 @@ public class ManagerProcess implements Runnable {
                     registry.getById(nextPID).getName(),
                     registry.getById(nextPID).getPriority());
 
-            try {
-                factory.put(nextPID);
-            } catch (IllegalArgumentException e) {
-                logger.error("[第 {} 天] 放入任务盒失败: {}", dayCount, e.getMessage());
+            FactoryResult putResult = factory.put(nextPID);
+            if (putResult != FactoryResult.SUCCESS) {
+                if (putResult == FactoryResult.INTERRUPTED) {
+                    logger.info("经理进程被中断 - 已工作 {} 天，正在关闭", dayCount);
+                } else {
+                    logger.warn("[第 {} 天] 放入任务盒失败（pID={}，结果={}），不递增 pID，不 sleep", dayCount, nextPID, putResult);
+                }
+                break;
             }
 
             try {

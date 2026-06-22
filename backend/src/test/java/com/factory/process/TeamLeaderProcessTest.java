@@ -1,6 +1,7 @@
 package com.factory.process;
 
 import com.factory.model.Factory;
+import com.factory.model.GetResult;
 import com.factory.model.ProductionTypeRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class TeamLeaderProcessTest {
             @Override
             public void run() {
                 for (int i = 0; i < 3; i++) {
-                    int val = factory.get();
+                    int val = factory.get().getValue();
                     consumedValues.add(val);
                     consumed.countDown();
                 }
@@ -106,7 +107,7 @@ class TeamLeaderProcessTest {
     }
 
     @Test
-    @DisplayName("get() 返回 -1 时消费者应退出循环")
+    @DisplayName("get() 返回失败结果时消费者应退出循环")
     void testConsumerExitsOnMinusOne() throws InterruptedException {
         Factory factory = new Factory();
 
@@ -115,8 +116,8 @@ class TeamLeaderProcessTest {
         TeamLeaderProcess leader = new TeamLeaderProcess(factory) {
             @Override
             public void run() {
-                int pID = factory.get();
-                if (pID == -1) {
+                GetResult gr = factory.get();
+                if (!gr.isSuccess()) {
                     loopExited.set(true);
                     return;
                 }
@@ -130,7 +131,7 @@ class TeamLeaderProcessTest {
         consumer.interrupt();
         consumer.join(3000);
 
-        assertTrue(loopExited.get(), "get() 返回 -1 时应退出循环");
+        assertTrue(loopExited.get(), "get() 返回失败结果时应退出循环");
     }
 
     @Test
@@ -144,9 +145,9 @@ class TeamLeaderProcessTest {
 
         Thread consumer = new Thread(() -> {
             for (int i = 0; i < taskCount; i++) {
-                int val = factory.get();
-                if (val != -1) {
-                    consumedValues.add(val);
+                GetResult gr = factory.get();
+                if (gr.isSuccess()) {
+                    consumedValues.add(gr.getValue());
                 }
                 allConsumed.countDown();
             }

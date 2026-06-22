@@ -168,7 +168,8 @@ class AppConfigTest {
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_USE_THREAD_POOL));
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_THREAD_POOL_SIZE));
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_SCHEDULE_STRATEGY));
-        assertEquals(12, config.getAllKeys().size());
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_DRAIN_ON_SHUTDOWN));
+        assertEquals(13, config.getAllKeys().size());
     }
 
     @Test
@@ -203,7 +204,7 @@ class AppConfigTest {
 
         Map<String, Object> map = config.getAllConfigAsMap();
 
-        assertEquals(12, map.size());
+        assertEquals(13, map.size());
         assertEquals(777L, map.get(AppConfig.KEY_MANAGER_INTERVAL_MS));
         assertEquals(AppConfig.DEFAULT_TEAM_LEADER_MANUFACTURING_MS, map.get(AppConfig.KEY_TEAM_LEADER_MANUFACTURING_MS));
         assertEquals(AppConfig.DEFAULT_SCHEDULE_STRATEGY, map.get(AppConfig.KEY_SCHEDULE_STRATEGY));

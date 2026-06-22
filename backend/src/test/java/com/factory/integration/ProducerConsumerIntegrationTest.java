@@ -1,6 +1,7 @@
 package com.factory.integration;
 
 import com.factory.model.Factory;
+import com.factory.model.GetResult;
 import com.factory.process.ManagerProcess;
 import com.factory.process.TeamLeaderProcess;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +47,7 @@ class ProducerConsumerIntegrationTest {
             @Override
             public void run() {
                 for (int i = 0; i < totalItems; i++) {
-                    int pID = factory.get();
+                    int pID = factory.get().getValue();
                     consumedList.add(pID);
                     allConsumed.countDown();
                 }
@@ -92,7 +93,7 @@ class ProducerConsumerIntegrationTest {
             @Override
             public void run() {
                 for (int i = 0; i < totalItems; i++) {
-                    consumedList.add(factory.get());
+                    consumedList.add(factory.get().getValue());
                     allConsumed.countDown();
                 }
             }
@@ -163,8 +164,8 @@ class ProducerConsumerIntegrationTest {
             @Override
             public void run() {
                 for (int i = 0; i < rounds; i++) {
-                    int val = factory.get();
-                    if (val != -1) {
+                    GetResult gr = factory.get();
+                    if (gr.isSuccess()) {
                         consumedCount.incrementAndGet();
                     }
                     allDone.countDown();
@@ -211,7 +212,7 @@ class ProducerConsumerIntegrationTest {
             @Override
             public void run() {
                 for (int i = 0; i < totalItems; i++) {
-                    consumedList.add(factory.get());
+                    consumedList.add(factory.get().getValue());
                     allConsumed.countDown();
                 }
             }
@@ -257,7 +258,7 @@ class ProducerConsumerIntegrationTest {
             @Override
             public void run() {
                 for (int i = 0; i < totalItems; i++) {
-                    consumedList.add(factory.get());
+                    consumedList.add(factory.get().getValue());
                     allConsumed.countDown();
                 }
             }
@@ -302,7 +303,7 @@ class ProducerConsumerIntegrationTest {
             @Override
             public void run() {
                 for (int i = 0; i < totalItems; i++) {
-                    consumedList.add(factory.get());
+                    consumedList.add(factory.get().getValue());
                     allConsumed.countDown();
                 }
             }
