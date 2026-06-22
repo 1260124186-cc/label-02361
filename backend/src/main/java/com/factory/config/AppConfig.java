@@ -20,18 +20,36 @@ public class AppConfig {
     public static final String KEY_SHUTDOWN_JOIN_TIMEOUT_MS = "shutdown.join.timeout.ms";
     public static final String KEY_PRODUCTION_TYPES = "production.types";
     public static final String KEY_LOG_LEVEL = "log.level";
+    public static final String KEY_TEAM_SIZE = "team.size";
+    public static final String KEY_REQUIRED_PEOPLE_PER_TASK = "task.required.people";
+    public static final String KEY_CAPACITY_STRATEGY = "capacity.strategy";
+    public static final String KEY_CAPACITY_WAIT_TIMEOUT_MS = "capacity.wait.timeout.ms";
+    public static final String KEY_USE_THREAD_POOL = "task.use.thread.pool";
+    public static final String KEY_THREAD_POOL_SIZE = "task.thread.pool.size";
 
     public static final long DEFAULT_MANAGER_INTERVAL_MS = 1000L;
     public static final long DEFAULT_TEAM_LEADER_MANUFACTURING_MS = 1500L;
     public static final long DEFAULT_SHUTDOWN_JOIN_TIMEOUT_MS = 3000L;
     public static final int DEFAULT_PRODUCTION_TYPES = 5;
     public static final String DEFAULT_LOG_LEVEL = "INFO";
+    public static final int DEFAULT_TEAM_SIZE = 3;
+    public static final int DEFAULT_REQUIRED_PEOPLE_PER_TASK = 2;
+    public static final String DEFAULT_CAPACITY_STRATEGY = "wait";
+    public static final long DEFAULT_CAPACITY_WAIT_TIMEOUT_MS = 0L;
+    public static final boolean DEFAULT_USE_THREAD_POOL = true;
+    public static final int DEFAULT_THREAD_POOL_SIZE = 5;
 
     public static final String ENV_MANAGER_INTERVAL_MS = "MANAGER_INTERVAL_MS";
     public static final String ENV_TEAM_LEADER_MANUFACTURING_MS = "TEAM_LEADER_MANUFACTURING_MS";
     public static final String ENV_SHUTDOWN_JOIN_TIMEOUT_MS = "SHUTDOWN_JOIN_TIMEOUT_MS";
     public static final String ENV_PRODUCTION_TYPES = "PRODUCTION_TYPES";
     public static final String ENV_LOG_LEVEL = "LOG_LEVEL";
+    public static final String ENV_TEAM_SIZE = "TEAM_SIZE";
+    public static final String ENV_REQUIRED_PEOPLE_PER_TASK = "REQUIRED_PEOPLE_PER_TASK";
+    public static final String ENV_CAPACITY_STRATEGY = "CAPACITY_STRATEGY";
+    public static final String ENV_CAPACITY_WAIT_TIMEOUT_MS = "CAPACITY_WAIT_TIMEOUT_MS";
+    public static final String ENV_USE_THREAD_POOL = "USE_THREAD_POOL";
+    public static final String ENV_THREAD_POOL_SIZE = "THREAD_POOL_SIZE";
 
     public static final String PROPERTIES_FILE = "application.properties";
 
@@ -94,6 +112,36 @@ public class AppConfig {
                 ConfigValue.stringValue(KEY_LOG_LEVEL,
                         resolveString(KEY_LOG_LEVEL, ENV_LOG_LEVEL, DEFAULT_LOG_LEVEL),
                         DEFAULT_LOG_LEVEL));
+
+        configValues.put(KEY_TEAM_SIZE,
+                ConfigValue.intValue(KEY_TEAM_SIZE,
+                        resolveInt(KEY_TEAM_SIZE, ENV_TEAM_SIZE, DEFAULT_TEAM_SIZE),
+                        DEFAULT_TEAM_SIZE));
+
+        configValues.put(KEY_REQUIRED_PEOPLE_PER_TASK,
+                ConfigValue.intValue(KEY_REQUIRED_PEOPLE_PER_TASK,
+                        resolveInt(KEY_REQUIRED_PEOPLE_PER_TASK, ENV_REQUIRED_PEOPLE_PER_TASK, DEFAULT_REQUIRED_PEOPLE_PER_TASK),
+                        DEFAULT_REQUIRED_PEOPLE_PER_TASK));
+
+        configValues.put(KEY_CAPACITY_STRATEGY,
+                ConfigValue.stringValue(KEY_CAPACITY_STRATEGY,
+                        resolveString(KEY_CAPACITY_STRATEGY, ENV_CAPACITY_STRATEGY, DEFAULT_CAPACITY_STRATEGY),
+                        DEFAULT_CAPACITY_STRATEGY));
+
+        configValues.put(KEY_CAPACITY_WAIT_TIMEOUT_MS,
+                ConfigValue.longValue(KEY_CAPACITY_WAIT_TIMEOUT_MS,
+                        resolveLong(KEY_CAPACITY_WAIT_TIMEOUT_MS, ENV_CAPACITY_WAIT_TIMEOUT_MS, DEFAULT_CAPACITY_WAIT_TIMEOUT_MS),
+                        DEFAULT_CAPACITY_WAIT_TIMEOUT_MS));
+
+        configValues.put(KEY_USE_THREAD_POOL,
+                ConfigValue.booleanValue(KEY_USE_THREAD_POOL,
+                        resolveBoolean(KEY_USE_THREAD_POOL, ENV_USE_THREAD_POOL, DEFAULT_USE_THREAD_POOL),
+                        DEFAULT_USE_THREAD_POOL));
+
+        configValues.put(KEY_THREAD_POOL_SIZE,
+                ConfigValue.intValue(KEY_THREAD_POOL_SIZE,
+                        resolveInt(KEY_THREAD_POOL_SIZE, ENV_THREAD_POOL_SIZE, DEFAULT_THREAD_POOL_SIZE),
+                        DEFAULT_THREAD_POOL_SIZE));
     }
 
     private String resolveString(String propertyKey, String envKey, String defaultValue) {
@@ -137,6 +185,19 @@ public class AppConfig {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
             logger.warn("配置项 {} 值 '{}' 不是有效的 int 类型，使用默认值 {}", propertyKey, value, defaultValue);
+            return defaultValue;
+        }
+    }
+
+    private boolean resolveBoolean(String propertyKey, String envKey, boolean defaultValue) {
+        String value = resolveString(propertyKey, envKey, null);
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Boolean.parseBoolean(value.trim());
+        } catch (Exception e) {
+            logger.warn("配置项 {} 值 '{}' 不是有效的 boolean 类型，使用默认值 {}", propertyKey, value, defaultValue);
             return defaultValue;
         }
     }
@@ -195,6 +256,30 @@ public class AppConfig {
         return (String) configValues.get(KEY_LOG_LEVEL).getValue();
     }
 
+    public int getTeamSize() {
+        return (Integer) configValues.get(KEY_TEAM_SIZE).getValue();
+    }
+
+    public int getRequiredPeoplePerTask() {
+        return (Integer) configValues.get(KEY_REQUIRED_PEOPLE_PER_TASK).getValue();
+    }
+
+    public String getCapacityStrategy() {
+        return (String) configValues.get(KEY_CAPACITY_STRATEGY).getValue();
+    }
+
+    public long getCapacityWaitTimeoutMs() {
+        return (Long) configValues.get(KEY_CAPACITY_WAIT_TIMEOUT_MS).getValue();
+    }
+
+    public boolean isUseThreadPool() {
+        return (Boolean) configValues.get(KEY_USE_THREAD_POOL).getValue();
+    }
+
+    public int getThreadPoolSize() {
+        return (Integer) configValues.get(KEY_THREAD_POOL_SIZE).getValue();
+    }
+
     private void applyLogLevel() {
         String levelStr = getLogLevel();
         try {
@@ -223,6 +308,12 @@ public class AppConfig {
             case KEY_SHUTDOWN_JOIN_TIMEOUT_MS -> resolveSource(KEY_SHUTDOWN_JOIN_TIMEOUT_MS, ENV_SHUTDOWN_JOIN_TIMEOUT_MS);
             case KEY_PRODUCTION_TYPES -> resolveSource(KEY_PRODUCTION_TYPES, ENV_PRODUCTION_TYPES);
             case KEY_LOG_LEVEL -> resolveSource(KEY_LOG_LEVEL, ENV_LOG_LEVEL);
+            case KEY_TEAM_SIZE -> resolveSource(KEY_TEAM_SIZE, ENV_TEAM_SIZE);
+            case KEY_REQUIRED_PEOPLE_PER_TASK -> resolveSource(KEY_REQUIRED_PEOPLE_PER_TASK, ENV_REQUIRED_PEOPLE_PER_TASK);
+            case KEY_CAPACITY_STRATEGY -> resolveSource(KEY_CAPACITY_STRATEGY, ENV_CAPACITY_STRATEGY);
+            case KEY_CAPACITY_WAIT_TIMEOUT_MS -> resolveSource(KEY_CAPACITY_WAIT_TIMEOUT_MS, ENV_CAPACITY_WAIT_TIMEOUT_MS);
+            case KEY_USE_THREAD_POOL -> resolveSource(KEY_USE_THREAD_POOL, ENV_USE_THREAD_POOL);
+            case KEY_THREAD_POOL_SIZE -> resolveSource(KEY_THREAD_POOL_SIZE, ENV_THREAD_POOL_SIZE);
             default -> "未知";
         };
     }
@@ -286,7 +377,13 @@ public class AppConfig {
                 ENV_TEAM_LEADER_MANUFACTURING_MS,
                 ENV_SHUTDOWN_JOIN_TIMEOUT_MS,
                 ENV_PRODUCTION_TYPES,
-                ENV_LOG_LEVEL
+                ENV_LOG_LEVEL,
+                ENV_TEAM_SIZE,
+                ENV_REQUIRED_PEOPLE_PER_TASK,
+                ENV_CAPACITY_STRATEGY,
+                ENV_CAPACITY_WAIT_TIMEOUT_MS,
+                ENV_USE_THREAD_POOL,
+                ENV_THREAD_POOL_SIZE
         );
 
         Map<String, String> result = new LinkedHashMap<>();
@@ -343,6 +440,10 @@ public class AppConfig {
         }
 
         public static ConfigValue<String> stringValue(String key, String value, String defaultValue) {
+            return new ConfigValue<>(key, value, defaultValue);
+        }
+
+        public static ConfigValue<Boolean> booleanValue(String key, boolean value, boolean defaultValue) {
             return new ConfigValue<>(key, value, defaultValue);
         }
 

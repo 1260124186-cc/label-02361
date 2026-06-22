@@ -27,6 +27,12 @@ class AppConfigTest {
         System.clearProperty("shutdown.join.timeout.ms");
         System.clearProperty("production.types");
         System.clearProperty("log.level");
+        System.clearProperty("team.size");
+        System.clearProperty("task.required.people");
+        System.clearProperty("capacity.strategy");
+        System.clearProperty("capacity.wait.timeout.ms");
+        System.clearProperty("task.use.thread.pool");
+        System.clearProperty("task.thread.pool.size");
     }
 
     @Test
@@ -39,6 +45,12 @@ class AppConfigTest {
         assertEquals(AppConfig.DEFAULT_SHUTDOWN_JOIN_TIMEOUT_MS, config.getShutdownJoinTimeoutMs());
         assertEquals(AppConfig.DEFAULT_PRODUCTION_TYPES, config.getProductionTypes());
         assertEquals(AppConfig.DEFAULT_LOG_LEVEL, config.getLogLevel());
+        assertEquals(AppConfig.DEFAULT_TEAM_SIZE, config.getTeamSize());
+        assertEquals(AppConfig.DEFAULT_REQUIRED_PEOPLE_PER_TASK, config.getRequiredPeoplePerTask());
+        assertEquals(AppConfig.DEFAULT_CAPACITY_STRATEGY, config.getCapacityStrategy());
+        assertEquals(AppConfig.DEFAULT_CAPACITY_WAIT_TIMEOUT_MS, config.getCapacityWaitTimeoutMs());
+        assertEquals(AppConfig.DEFAULT_USE_THREAD_POOL, config.isUseThreadPool());
+        assertEquals(AppConfig.DEFAULT_THREAD_POOL_SIZE, config.getThreadPoolSize());
     }
 
     @Test
@@ -147,7 +159,13 @@ class AppConfigTest {
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_SHUTDOWN_JOIN_TIMEOUT_MS));
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_PRODUCTION_TYPES));
         assertTrue(config.getAllKeys().contains(AppConfig.KEY_LOG_LEVEL));
-        assertEquals(5, config.getAllKeys().size());
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_TEAM_SIZE));
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_REQUIRED_PEOPLE_PER_TASK));
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_CAPACITY_STRATEGY));
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_CAPACITY_WAIT_TIMEOUT_MS));
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_USE_THREAD_POOL));
+        assertTrue(config.getAllKeys().contains(AppConfig.KEY_THREAD_POOL_SIZE));
+        assertEquals(11, config.getAllKeys().size());
     }
 
     @Test
@@ -182,7 +200,7 @@ class AppConfigTest {
 
         Map<String, Object> map = config.getAllConfigAsMap();
 
-        assertEquals(5, map.size());
+        assertEquals(11, map.size());
         assertEquals(777L, map.get(AppConfig.KEY_MANAGER_INTERVAL_MS));
         assertEquals(AppConfig.DEFAULT_TEAM_LEADER_MANUFACTURING_MS, map.get(AppConfig.KEY_TEAM_LEADER_MANUFACTURING_MS));
     }
